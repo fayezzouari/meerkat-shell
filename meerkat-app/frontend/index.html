@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Meerkat</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/css/xterm.css"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #1e1e1e;
+      }
+      #terminal {
+        height: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="terminal"></div>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/lib/xterm.js"></script>
+    <script src="./main.js"></script>
+  </body>
+</html>

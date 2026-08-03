@@ -1,6 +1,6 @@
-defmodule Meerkat do
+defmodule MeerkatDaemon do
   @moduledoc """
-  Documentation for `Meerkat Daemon`.
+  Documentation for `MeerkatDaemon`.
   """
 
   @doc """
@@ -8,7 +8,7 @@ defmodule Meerkat do
 
   ## Examples
 
-      iex> Meerkat.hello()
+      iex> MeerkatDaemon.hello()
       :world
 
   """

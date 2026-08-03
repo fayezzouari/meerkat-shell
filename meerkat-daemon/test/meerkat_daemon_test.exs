@@ -1,8 +1,8 @@
 defmodule MeerkatDaemonTest do
   use ExUnit.Case
-  doctest Meerkat
+  doctest MeerkatDaemon
 
   test "greets the world" do
-    assert Meerkat.hello() == :world
+    assert MeerkatDaemon.hello() == :world
   end
 end

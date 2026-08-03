@@ -1,4 +1,4 @@
-defmodule MeerkatTest do
+defmodule MeerkatDaemonTest do
   use ExUnit.Case
   doctest Meerkat
 

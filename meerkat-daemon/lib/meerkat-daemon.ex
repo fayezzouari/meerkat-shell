@@ -1,6 +1,6 @@
 defmodule Meerkat do
   @moduledoc """
-  Documentation for `Meerkat`.
+  Documentation for `Meerkat Daemon`.
   """
 
   @doc """

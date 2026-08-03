@@ -22,8 +22,11 @@ defmodule MeerkatDaemon.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      # {:dep_from_hexpm, "~> 0.3.0"},
-      # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
+      # Fetched via git rather than {:erlexec, "~> 2.0"} from Hex — both
+      # work identically once you have normal internet access; git was
+      # what this environment's network allowlist permitted while
+      # building this. Feel free to switch to the Hex version.
+      {:erlexec, git: "https://github.com/saleyn/erlexec.git", tag: "2.0.6"}
     ]
   end
 end

@@ -1,23 +1,22 @@
 defmodule MeerkatDaemon.Parser do
   @moduledoc """
-  Phase 1 parser.
-
   Tokenizes a line (respecting single/double quotes) and splits it into
-  pipeline stages on `|`. This is intentionally close to POSIX shell
-  syntax for now — the plan is to introduce a distinct structured-pipe
-  token (e.g. `|>`) later that routes into decoded Elixir terms instead
-  of another OS process. Keeping the raw `|` behavior first means every
-  pipeline stage can still be exec'd as one OS process group, which is
-  what job control (Ctrl+Z, bg, fg) needs to attach to later.
+  pipeline stages on `|`, plus a trailing `&` for background jobs. Still
+  intentionally close to POSIX shell syntax — the plan is a distinct
+  structured-pipe token (e.g. `|>`) later that routes into decoded
+  Elixir terms instead of another OS process. Keeping raw `|` behavior
+  means every pipeline stage still execs as one OS process group, which
+  is what job control (`fg`/`bg`/`kill`/`stop`) attaches to.
   """
 
   @type stage :: {String.t(), [String.t()]}
+  @type mode :: :foreground | :background
 
-  @spec parse(String.t()) :: {:ok, [stage]} | {:error, String.t()}
+  @spec parse(String.t()) :: {:ok, [stage], mode} | {:error, String.t()}
   def parse(line) do
-    case tokenize(line) do
-      {:ok, tokens} -> group(tokens)
-      {:error, reason} -> {:error, reason}
+    with {:ok, tokens} <- tokenize(line),
+         {:ok, tokens, mode} <- take_background_marker(tokens) do
+      group(tokens, mode)
     end
   end
 
@@ -32,6 +31,10 @@ defmodule MeerkatDaemon.Parser do
 
   defp tokenize([?| | rest], word, tokens) do
     tokenize(rest, [], [:pipe | flush(word, tokens)])
+  end
+
+  defp tokenize([?& | rest], word, tokens) do
+    tokenize(rest, [], [:background | flush(word, tokens)])
   end
 
   defp tokenize([?" | rest], word, tokens) do
@@ -61,9 +64,31 @@ defmodule MeerkatDaemon.Parser do
 
   defp finish(word), do: {:word, word |> Enum.reverse() |> List.to_string()}
 
-  defp group([]), do: {:ok, []}
+  # Only a trailing `&` is treated as the background marker — anywhere
+  # else it's ambiguous with our current grammar, so it's a parse error
+  # rather than silently doing something surprising.
+  defp take_background_marker(tokens) do
+    case List.last(tokens) do
+      :background ->
+        rest = List.delete_at(tokens, -1)
+        if :background in rest do
+          {:error, "'&' is only supported at the end of a command"}
+        else
+          {:ok, rest, :background}
+        end
 
-  defp group(tokens) do
+      _ ->
+        if :background in tokens do
+          {:error, "'&' is only supported at the end of a command"}
+        else
+          {:ok, tokens, :foreground}
+        end
+    end
+  end
+
+  defp group([], mode), do: {:ok, [], mode}
+
+  defp group(tokens, mode) do
     tokens
     |> split_on_pipe()
     |> Enum.reduce_while({:ok, []}, fn stage_tokens, {:ok, acc} ->
@@ -77,7 +102,7 @@ defmodule MeerkatDaemon.Parser do
       end
     end)
     |> case do
-      {:ok, stages} -> {:ok, Enum.reverse(stages)}
+      {:ok, stages} -> {:ok, Enum.reverse(stages), mode}
       error -> error
     end
   end

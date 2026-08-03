@@ -65,17 +65,17 @@ defmodule MeerkatDaemon.Connection do
         send_line(state.socket, "X:1")
         {:continue, state}
 
-      {:ok, []} ->
+      {:ok, [], _mode} ->
         send_line(state.socket, "X:0")
         {:continue, state}
 
-      {:ok, stages} ->
+      {:ok, stages, mode} ->
         emit = fn
           :stdout, text -> send_line(state.socket, "O:" <> text)
           :stderr, text -> send_line(state.socket, "E:" <> text)
         end
 
-        case Evaluator.run(stages, state.cwd, emit) do
+        case Evaluator.run(stages, state.cwd, mode, emit) do
           {:exit, _cwd, _code} ->
             send_line(state.socket, "X:0")
             {:stop, state}

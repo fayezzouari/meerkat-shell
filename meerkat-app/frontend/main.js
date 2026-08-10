@@ -179,7 +179,19 @@ function longestCommonPrefix(strs) {
   return p;
 }
 
+// Active tab-completion menu, or null. Rather than reprinting the
+// candidate list on every Tab press, a second (third, ...) Tab cycles
+// `index` through `candidates` and swaps the selected one into the line
+// in place — see cycleCompletion/applySelectedCandidate. Left/Right and
+// Shift+Tab also cycle it (wired in term.onData).
+let completion = null;
+
 async function handleTab() {
+  if (completion) {
+    cycleCompletion(1);
+    return;
+  }
+
   const before = currentLine.slice(0, cursorPos);
   const wordStart = before.lastIndexOf(" ") + 1;
   const word = before.slice(wordStart);
@@ -207,14 +219,63 @@ async function handleTab() {
   // the suffix math above), but showing "prontooo/x  prontooo/y  ..." is
   // just noise once you're already inside prontooo/ — display only the
   // part past the directory `word` itself is completing within.
-  const dirLen = word.lastIndexOf("/") + 1;
-  const displayCandidates = candidates.map((c) => c.slice(dirLen));
-  term.write("\r\n" + displayCandidates.join("    "));
-  prompt();
-  term.write(currentLine);
-  if (currentLine.length > cursorPos) {
-    term.write(`\x1b[${currentLine.length - cursorPos}D`);
-  }
+  completion = {
+    candidates,
+    dirLen: word.lastIndexOf("/") + 1,
+    wordStart,
+    index: -1,
+  };
+  cycleCompletion(1);
+}
+
+// Moves the menu selection by `delta` (wrapping), swaps the newly
+// selected candidate into the line, and redraws the list below the
+// prompt with the selection highlighted.
+function cycleCompletion(delta) {
+  const n = completion.candidates.length;
+  completion.index = (completion.index + delta + n) % n;
+  applySelectedCandidate();
+  renderCompletionList();
+}
+
+// Replaces the word at completion.wordStart..cursorPos with the selected
+// candidate, the same cursor-relative rewrite technique backspace()/
+// insertText() use elsewhere in this file — move the terminal cursor back
+// to the word's start, erase to end of line, rewrite.
+function applySelectedCandidate() {
+  const newWord = completion.candidates[completion.index];
+  const restAfter = currentLine.slice(cursorPos);
+
+  const back = cursorPos - completion.wordStart;
+  if (back > 0) term.write(`\x1b[${back}D`);
+  term.write("\x1b[K" + newWord + restAfter);
+  if (restAfter.length > 0) term.write(`\x1b[${restAfter.length}D`);
+
+  currentLine = currentLine.slice(0, completion.wordStart) + newWord + restAfter;
+  cursorPos = completion.wordStart + newWord.length;
+}
+
+// Draws the candidate list on the line below, selected entry in inverse
+// video, then returns the cursor to right where it was on the input line.
+// \x1b[s/\x1b[u (save/restore cursor) mean this doesn't need to track how
+// many terminal rows the list wraps to — the same total text length gets
+// written every time (only the inverse-video span moves), so there's
+// nothing stale left behind to erase first.
+function renderCompletionList() {
+  const items = completion.candidates.map((c, i) => {
+    const label = c.slice(completion.dirLen);
+    return i === completion.index ? `\x1b[7m${label}\x1b[27m` : label;
+  });
+  term.write("\x1b[s\r\n" + items.join("    ") + "\x1b[u");
+}
+
+// Erases the candidate list and drops the menu state — called whenever
+// anything other than Tab/Shift+Tab/Left/Right is pressed, confirming
+// whatever's currently selected.
+function closeCompletionMenu() {
+  if (!completion) return;
+  term.write("\x1b[s\r\n\x1b[0J\x1b[u");
+  completion = null;
 }
 
 // Handles a full escape sequence delivered as one onData chunk (xterm.js
@@ -263,6 +324,27 @@ term.onData((data) => {
     // itself interprets them; no local editing applies here.
     window.go.main.App.SendInput(data);
     return;
+  }
+
+  if (completion) {
+    if (data === "\t") {
+      cycleCompletion(1);
+      return;
+    }
+    if (data === "\x1b[Z" || data === "\x1b[D") {
+      // Shift+Tab, or Left — move to the previous candidate.
+      cycleCompletion(-1);
+      return;
+    }
+    if (data === "\x1b[C") {
+      // Right — move to the next candidate.
+      cycleCompletion(1);
+      return;
+    }
+    // Anything else confirms the current selection: close the menu, then
+    // fall through to handle this keystroke normally (Enter runs the
+    // line as-is, typing keeps editing from here, ...).
+    closeCompletionMenu();
   }
 
   if (data === "\r") {

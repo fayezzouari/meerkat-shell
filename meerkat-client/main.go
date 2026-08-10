@@ -8,6 +8,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -16,7 +17,13 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/chzyer/readline"
 )
+
+// builtins mirrors MeerkatDaemon.Evaluator's @builtins — kept here only so
+// Tab completion knows about them, not to duplicate any execution logic.
+var builtins = []string{"cd", "exit", "quit", "jobs", "fg", "bg", "kill", "stop"}
 
 func socketPath() string {
 	if p := os.Getenv("MEERKAT_SOCK"); p != "" {
@@ -27,6 +34,14 @@ func socketPath() string {
 		return "/tmp/meerkat.sock"
 	}
 	return filepath.Join(u.HomeDir, ".meerkat", "meerkat.sock")
+}
+
+func historyPath() string {
+	u, err := user.Current()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(u.HomeDir, ".meerkat", "history")
 }
 
 // startCmd is how the daemon gets launched if it isn't already running.
@@ -96,7 +111,6 @@ func main() {
 	defer conn.Close()
 
 	server := bufio.NewScanner(conn)
-	stdin := bufio.NewScanner(os.Stdin)
 	cwd := "~"
 
 	// Initial "D:" banner sent by the daemon on connect.
@@ -104,13 +118,38 @@ func main() {
 		cwd = handleLine(server.Text(), cwd)
 	}
 
+	completer := &pathCompleter{cwd: &cwd}
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:          promptFor(cwd),
+		HistoryFile:     historyPath(),
+		AutoComplete:    completer,
+		InterruptPrompt: "^C",
+		EOFPrompt:       "exit",
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "meerkat-client: readline init failed:", err)
+		os.Exit(1)
+	}
+	defer rl.Close()
+
 	for {
-		fmt.Printf("meerkat %s> ", shorten(cwd))
-		if !stdin.Scan() {
+		rl.SetPrompt(promptFor(cwd))
+		line, err := rl.Readline()
+		if err == readline.ErrInterrupt {
+			// Ctrl+C on an empty/partial line: bash-style, just start a fresh prompt.
+			continue
+		}
+		if err == io.EOF {
 			fmt.Println()
 			break // Ctrl+D
 		}
-		line := stdin.Text()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "meerkat-client:", err)
+			break
+		}
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
 
 		if _, err := fmt.Fprintln(conn, line); err != nil {
 			fmt.Fprintln(os.Stderr, "meerkat-client: lost connection to daemon:", err)
@@ -129,6 +168,10 @@ func main() {
 			break // daemon closed the socket (we sent exit/quit)
 		}
 	}
+}
+
+func promptFor(cwd string) string {
+	return fmt.Sprintf("meerkat %s> ", shorten(cwd))
 }
 
 // handleLine is only used for the very first banner line before the REPL loop starts.

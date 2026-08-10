@@ -81,7 +81,10 @@ defmodule MeerkatDaemon.Evaluator do
       jobs ->
         Enum.each(jobs, fn {id, job} ->
           suffix = if job.exit_code, do: " (exit #{job.exit_code})", else: ""
-          emit.(:stdout, "[#{id}] #{job.status}#{suffix}\t#{job.cmd}")
+          # Trailing os_pid lets a caller (meerkat-app's ListJobs, for the
+          # Ctrl+M overlay's memory stats) look up the OS process directly
+          # instead of needing a new protocol message just for this.
+          emit.(:stdout, "[#{id}] #{job.status}#{suffix}\t#{job.cmd}\t#{job.os_pid}")
         end)
     end
 

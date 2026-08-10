@@ -4,6 +4,11 @@ defmodule MeerkatDaemon.SocketServer do
   a supervised `MeerkatDaemon.Connection`. This is the piece a client dials
   into — lazy-start clients should treat "connection refused / no such
   file" on this path as "spawn the daemon, then retry".
+
+  `packet: 4` (4-byte length-prefixed framing) rather than `packet: :line`:
+  pty output can't safely be split on "\\n" (see `Connection`'s
+  moduledoc), so every message is now a discrete length-prefixed frame
+  with a leading type byte instead of a text line.
   """
   use GenServer
   require Logger
@@ -23,7 +28,7 @@ defmodule MeerkatDaemon.SocketServer do
     {:ok, listen_socket} =
       :gen_tcp.listen(0, [
         :binary,
-        packet: :line,
+        packet: 4,
         active: false,
         reuseaddr: true,
         ifaddr: {:local, path}

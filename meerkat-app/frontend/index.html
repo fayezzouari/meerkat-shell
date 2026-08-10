@@ -17,16 +17,130 @@
         margin: 0;
         height: 100%;
         background: #0b0b0c;
+        font-family: "JetBrains Mono", Menlo, Consolas, monospace;
       }
-      #terminal {
-        height: 100%;
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Tab bar */
+      #tabbar {
+        display: flex;
+        flex: 0 0 auto;
+        background: #0b0b0c;
+        border-bottom: 1px solid #222;
+        -webkit-app-region: drag;
+        min-height: 30px;
+      }
+      .tab {
+        -webkit-app-region: no-drag;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        font-size: 12px;
+        color: #707070;
+        border-right: 1px solid #1c1c1c;
+        cursor: pointer;
+        user-select: none;
+      }
+      .tab.active {
+        color: #d9d9d9;
+        background: #17171a;
+        border-bottom: 2px solid #4dc4c4;
+      }
+      .tab-close {
+        color: #555;
+      }
+      .tab-close:hover {
+        color: #e05c5c;
+      }
+
+      /* Panes */
+      #panes {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+      .pane {
+        position: absolute;
+        inset: 0;
         padding: 10px;
         box-sizing: border-box;
+      }
+
+      /* Ctrl+M overlay */
+      #overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 60px;
+        z-index: 10;
+      }
+      #overlay.hidden {
+        display: none;
+      }
+      .overlay-panel {
+        background: #141416;
+        border: 1px solid #262626;
+        border-radius: 8px;
+        width: 480px;
+        max-width: 90%;
+        max-height: 70vh;
+        overflow-y: auto;
+        padding: 12px 0;
+      }
+      .overlay-section + .overlay-section {
+        border-top: 1px solid #222;
+        margin-top: 8px;
+        padding-top: 8px;
+      }
+      .overlay-heading {
+        color: #4dc4c4;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 4px 14px;
+      }
+      .overlay-row {
+        padding: 6px 14px;
+        font-size: 13px;
+        color: #a8a8a8;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .overlay-session {
+        cursor: pointer;
+      }
+      .overlay-session:hover {
+        background: #1c1c1f;
+        color: #d9d9d9;
+      }
+      .overlay-empty {
+        padding: 6px 14px;
+        font-size: 13px;
+        color: #555;
+      }
+      .job-id {
+        color: #d9b84d;
+      }
+      .job-status {
+        color: #4dc4c4;
+        margin: 0 8px;
+      }
+      .job-cmd {
+        color: #a8a8a8;
       }
     </style>
   </head>
   <body>
-    <div id="terminal"></div>
+    <div id="tabbar"></div>
+    <div id="panes"></div>
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/lib/xterm.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10/lib/addon-fit.js"></script>
     <script type="module" src="./main.js"></script>

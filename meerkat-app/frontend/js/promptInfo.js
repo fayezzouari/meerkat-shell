@@ -34,7 +34,12 @@ export async function locationFor(cwd) {
   if (git && git.repo) {
     const repo = `\x1b[36m${git.repo}\x1b[0m`;
     const branch = git.branch ? ` \x1b[33m${git.branch}\x1b[0m` : "";
-    return repo + branch;
+    // Without this, "repo branch" looks identical whether you're at the
+    // repo root or three subdirectories deep — cd-ing into the same
+    // subdirectory twice (the second landing on "no such directory")
+    // gave no visual sign the first one had actually worked.
+    const subpath = git.subpath ? ` \x1b[90m${git.subpath}\x1b[0m` : "";
+    return repo + branch + subpath;
   }
 
   return shorten(cwd, homeDir);

@@ -4,6 +4,15 @@ function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
+// memoryKB is the RSS of the job's whole process tree (see app.go's
+// processTreeRSSKB), not just its top-level process — a `cmd1 | cmd2`
+// background job's real footprint is the sum of every stage.
+function formatMemory(kb) {
+  if (kb === null || kb === undefined) return "";
+  if (kb >= 1024) return `${(kb / 1024).toFixed(1)} MB`;
+  return `${kb} KB`;
+}
+
 // Ctrl+M overlay: open tabs + background jobs. Plain DOM/CSS rather than
 // drawn through xterm.js — far simpler for a panel like this. Jobs come
 // from ListJobs() (app.go), which reflects meerkat-daemon's single shared
@@ -36,9 +45,11 @@ export function createJobsOverlay(sessionManager) {
     return jobs
       .map((j) => {
         const exit = j.exitCode === null || j.exitCode === undefined ? "" : ` (exit ${j.exitCode})`;
+        const mem = formatMemory(j.memoryKB);
         return `<div class="overlay-row overlay-job">
           <span class="job-id">[${j.id}]</span>
           <span class="job-status">${escapeHtml(j.status)}${exit}</span>
+          ${mem ? `<span class="job-mem">${mem}</span>` : ""}
           <span class="job-cmd">${escapeHtml(j.cmd)}</span>
         </div>`;
       })

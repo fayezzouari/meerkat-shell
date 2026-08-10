@@ -13,27 +13,46 @@ defmodule MeerkatDaemon.Evaluator do
   through `sh -c`, one OS process group per pipeline — the same unit
   `fg`/`bg`/`kill`/`stop` all operate on.
 
+  Foreground pipelines run attached to a pty (real terminal semantics:
+  `isatty()` succeeds, curses programs like `vim`/`htop` work, output
+  isn't forced through line-buffering). `start_foreground/3` kicks the
+  job off and returns immediately — it does NOT block waiting for
+  output like it used to, because the caller (`Connection`) needs to
+  keep handling incoming client messages (keystrokes, resizes) while
+  the job runs, not sit blocked in a receive loop. `Connection` owns
+  the erlexec message loop for foreground jobs directly; `decode_exit/1`
+  is exposed publicly for it to reuse.
+
+  Background jobs (`cmd &`) are unaffected by any of this: no pty (there's
+  no interactive terminal to attach a detached job to), and still run
+  through the original blocking `stream/5` loop inside a `Task`, capturing
+  output into `JobManager` for later `fg`/`jobs`.
+
   Design note on `fg`: it blocks the calling connection until the job
   finishes, then replays that job's *captured* output — it does not
   re-route the job's *live* stdout/stderr to the connection that ran
   `fg` (those messages keep going to whichever process actually called
   `:exec.run/2`, i.e. the background Task). Real live reattachment
   would mean redirecting erlexec's message target mid-flight, which is
-  a reasonable next step but out of scope here.
+  a reasonable next step but out of scope here — same limitation as
+  before pty support, unrelated to it.
   """
 
   alias MeerkatDaemon.JobManager
 
   @type emit :: (:stdout | :stderr, String.t() -> :ok)
+  @type winsz :: {rows :: non_neg_integer(), cols :: non_neg_integer()}
 
   @builtins ~w(cd exit quit jobs fg bg kill stop)
 
-  @spec run([MeerkatDaemon.Parser.stage()], String.t(), MeerkatDaemon.Parser.mode(), emit) ::
-          {:ok, String.t(), non_neg_integer()} | {:exit, String.t(), non_neg_integer()}
-  def run(stages, cwd, mode, emit) do
+  @spec run([MeerkatDaemon.Parser.stage()], String.t(), MeerkatDaemon.Parser.mode(), emit, winsz) ::
+          {:ok, String.t(), non_neg_integer()}
+          | {:exit, String.t(), non_neg_integer()}
+          | {:running, pos_integer(), pid(), non_neg_integer(), String.t()}
+  def run(stages, cwd, mode, emit, winsz \\ {24, 80}) do
     case stages do
       [{cmd, args}] when cmd in @builtins -> builtin(cmd, args, cwd, emit)
-      _ -> exec_pipeline(stages, cwd, mode, emit)
+      _ -> exec_pipeline(stages, cwd, mode, emit, winsz)
     end
   end
 
@@ -170,18 +189,39 @@ defmodule MeerkatDaemon.Evaluator do
 
   ## Pipeline execution -------------------------------------------------
 
-  defp exec_pipeline(stages, cwd, :foreground, emit) do
+  # Starts the job attached to a pty and returns immediately without
+  # streaming anything — the caller (Connection) is the one that called
+  # :exec.run indirectly via us, so erlexec's :stdout/:stderr/:DOWN
+  # messages land in *its* mailbox, interleaved with client :tcp
+  # messages. That's what lets a running program keep receiving
+  # keystrokes (including Ctrl+C) instead of the connection being stuck
+  # in a blocking receive loop for the job's whole lifetime.
+  #
+  # pty_echo is on because the client no longer does its own local
+  # character echo while a job is running (see meerkat-app's
+  # frontend/main.js) — the pty layer now does that job, like a real
+  # terminal.
+  defp exec_pipeline(stages, cwd, :foreground, _emit, {rows, cols}) do
     cmd_string = render(stages)
     id = JobManager.new_job(cmd_string)
 
-    {:ok, pid, os_pid} = :exec.run(cmd_string, [:stdout, :stderr, :monitor, {:cd, cwd}])
-    JobManager.set_handle(id, pid, os_pid)
+    {:ok, pid, os_pid} =
+      :exec.run(cmd_string, [
+        :stdin,
+        :stdout,
+        :stderr,
+        :monitor,
+        :pty,
+        :pty_echo,
+        {:cd, cwd},
+        {:winsz, {rows, cols}}
+      ])
 
-    exit_code = stream(id, pid, os_pid, "", "", emit)
-    {:ok, cwd, exit_code}
+    JobManager.set_handle(id, pid, os_pid)
+    {:running, id, pid, os_pid, cwd}
   end
 
-  defp exec_pipeline(stages, cwd, :background, emit) do
+  defp exec_pipeline(stages, cwd, :background, emit, _winsz) do
     cmd_string = render(stages)
     id = JobManager.new_job(cmd_string)
 
@@ -223,9 +263,9 @@ defmodule MeerkatDaemon.Evaluator do
     end
   end
 
-  defp decode_exit(:normal), do: 0
+  def decode_exit(:normal), do: 0
 
-  defp decode_exit({:exit_status, raw}) do
+  def decode_exit({:exit_status, raw}) do
     case :exec.status(raw) do
       {:status, code} -> code
       # Bash convention: signal-terminated processes report 128+signum.
@@ -235,7 +275,7 @@ defmodule MeerkatDaemon.Evaluator do
     end
   end
 
-  defp decode_exit(_other), do: 1
+  def decode_exit(_other), do: 1
 
   @signals %{sighup: 1, sigint: 2, sigquit: 3, sigkill: 9, sigsegv: 11, sigpipe: 13, sigterm: 15}
   defp signal_number(sig), do: Map.get(@signals, sig, 1)

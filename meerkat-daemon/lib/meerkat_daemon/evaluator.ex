@@ -201,6 +201,14 @@ defmodule MeerkatDaemon.Evaluator do
   # character echo while a job is running (see meerkat-app's
   # frontend/main.js) — the pty layer now does that job, like a real
   # terminal.
+  #
+  # PAGER/GIT_PAGER/MANPAGER are forced to `cat`: a real pty means
+  # isatty() succeeds, which makes git/man et al. reach for `less` by
+  # default — and `less` then blocks waiting for keystrokes (space/q)
+  # that, from the client side, look exactly like the command just hung
+  # with no output. Full-screen programs run *directly* (vim, htop,
+  # `less` invoked explicitly) are unaffected — this only stops tools
+  # from *automatically* shelling out to a pager behind your back.
   defp exec_pipeline(stages, cwd, :foreground, _emit, {rows, cols}) do
     cmd_string = render(stages)
     id = JobManager.new_job(cmd_string)
@@ -214,7 +222,8 @@ defmodule MeerkatDaemon.Evaluator do
         :pty,
         :pty_echo,
         {:cd, cwd},
-        {:winsz, {rows, cols}}
+        {:winsz, {rows, cols}},
+        {:env, [{"PAGER", "cat"}, {"GIT_PAGER", "cat"}, {"MANPAGER", "cat"}]}
       ])
 
     JobManager.set_handle(id, pid, os_pid)

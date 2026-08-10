@@ -5,7 +5,9 @@ package daemonclient
 
 import (
 	"bufio"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -15,9 +17,26 @@ import (
 	"time"
 )
 
+// Wire protocol: 4-byte big-endian length prefix, then a payload whose
+// first byte is a type tag. Matches meerkat-daemon's `packet: 4` socket —
+// see meerkat_daemon/connection.ex for the full type list. Framed rather
+// than line-delimited because pty output can't safely be split on "\n"
+// (curses programs/progress bars redraw with "\r" and cursor escapes that
+// may never contain a newline).
+const (
+	MsgLine   = 'L' // client -> daemon: one full command line
+	MsgInput  = 'I' // client -> daemon: raw bytes for the running job's pty stdin
+	MsgResize = 'R' // client -> daemon: <<rows::16, cols::16>>
+	MsgStdout = 'O' // daemon -> client: builtin stdout text
+	MsgStderr = 'E' // daemon -> client: builtin stderr text
+	MsgCwd    = 'D' // daemon -> client: cwd (initial, and after `cd`)
+	MsgPty    = 'P' // daemon -> client: raw pty output, unbuffered
+	MsgExit   = 'X' // daemon -> client: command complete, exit code as text
+)
+
 type Client struct {
-	conn    net.Conn
-	scanner *bufio.Scanner
+	conn net.Conn
+	r    *bufio.Reader
 }
 
 func SocketPath() string {
@@ -87,22 +106,53 @@ func Connect() (*Client, error) {
 }
 
 func wrap(conn net.Conn) *Client {
-	return &Client{conn: conn, scanner: bufio.NewScanner(conn)}
+	return &Client{conn: conn, r: bufio.NewReader(conn)}
+}
+
+func (c *Client) writeFrame(msgType byte, payload []byte) error {
+	frame := make([]byte, 4+1+len(payload))
+	binary.BigEndian.PutUint32(frame[:4], uint32(1+len(payload)))
+	frame[4] = msgType
+	copy(frame[5:], payload)
+	_, err := c.conn.Write(frame)
+	return err
 }
 
 // SendLine writes one line of shell input to the daemon.
 func (c *Client) SendLine(line string) error {
-	_, err := fmt.Fprintln(c.conn, line)
-	return err
+	return c.writeFrame(MsgLine, []byte(line))
 }
 
-// ReadLine blocks for the next raw protocol line ("O:...", "E:...",
-// "D:...", or "X:..."). Returns ok=false once the connection is closed.
-func (c *Client) ReadLine() (line string, ok bool) {
-	if !c.scanner.Scan() {
-		return "", false
+// SendInput forwards raw bytes to the currently-running foreground job's
+// pty stdin (keystrokes, including control bytes like Ctrl+C/Ctrl+Z).
+func (c *Client) SendInput(data []byte) error {
+	return c.writeFrame(MsgInput, data)
+}
+
+// SendResize tells the daemon the client's terminal dimensions changed.
+func (c *Client) SendResize(rows, cols uint16) error {
+	payload := make([]byte, 4)
+	binary.BigEndian.PutUint16(payload[0:2], rows)
+	binary.BigEndian.PutUint16(payload[2:4], cols)
+	return c.writeFrame(MsgResize, payload)
+}
+
+// ReadFrame blocks for the next protocol frame (see the Msg* constants).
+// Returns ok=false once the connection is closed.
+func (c *Client) ReadFrame() (msgType byte, payload []byte, ok bool) {
+	var lenBuf [4]byte
+	if _, err := io.ReadFull(c.r, lenBuf[:]); err != nil {
+		return 0, nil, false
 	}
-	return c.scanner.Text(), true
+	n := binary.BigEndian.Uint32(lenBuf[:])
+	if n == 0 {
+		return 0, nil, false
+	}
+	buf := make([]byte, n)
+	if _, err := io.ReadFull(c.r, buf); err != nil {
+		return 0, nil, false
+	}
+	return buf[0], buf[1:], true
 }
 
 func (c *Client) Close() error {

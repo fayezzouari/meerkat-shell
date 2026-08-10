@@ -2,6 +2,7 @@ import { terminalOptions } from "./js/theme.js";
 import { createLineEditor } from "./js/lineEditor.js";
 import { createCompletionMenu } from "./js/completion.js";
 import * as daemon from "./js/daemonClient.js";
+import { locationFor } from "./js/promptInfo.js";
 
 const term = new Terminal(terminalOptions);
 const fitAddon = new FitAddon.FitAddon();
@@ -9,6 +10,23 @@ term.loadAddon(fitAddon);
 term.open(document.getElementById("terminal"));
 fitAddon.fit();
 term.writeln("Meerkat — connecting...");
+
+// FitAddon measures cell size from whatever font is actually rendering
+// right now — if JetBrains Mono (a webfont, loaded via index.html's
+// Google Fonts link) is still downloading, that first fit() above
+// measures the fallback font's (different) character width instead, and
+// the wrong cols/rows is what gets reported to the daemon below. Once the
+// real font swaps in with no corresponding re-fit, every pty'd program
+// (ls's column layout, vim/htop's full-screen redraws, plain line
+// wrapping) sizes itself against a terminal width that no longer matches
+// what's actually on screen. document.fonts.ready resolves once every
+// @font-face referenced in the document has finished loading, so this
+// re-fits and re-sends the corrected size — sendResize() again below is a
+// safe no-op-ish call (just resends the current, now-accurate, size).
+document.fonts.ready.then(() => {
+  fitAddon.fit();
+  sendResize();
+});
 
 const editor = createLineEditor(term);
 const completion = createCompletionMenu(term, editor);
@@ -22,13 +40,15 @@ let cwd = "~";
 // echoes them back, exactly like a real terminal.
 let jobRunning = false;
 
-// Minimal prompt: cwd in the default muted grey, a plain white arrow, then
-// switches to bright white (left active, no trailing reset) so everything
-// typed next — the command itself — reads white against the grey output
-// around it. \x1b[0m up front guards against a program leaving the
-// terminal mid-SGR-state on exit.
-function prompt() {
-  term.write(`\x1b[0m\r\n${cwd} \x1b[97m❯\x1b[0m \x1b[97m`);
+// Prompt shows "<repo> <branch>" (colored) inside a git working tree, or
+// the "~"-shortened cwd otherwise — see promptInfo.js. Then a plain white
+// arrow, then switches to bright white (left active, no trailing reset)
+// so everything typed next — the command itself — reads white against the
+// grey/colored output around it. \x1b[0m up front guards against a
+// program leaving the terminal mid-SGR-state on exit.
+async function prompt() {
+  const location = await locationFor(cwd);
+  term.write(`\x1b[0m\r\n${location} \x1b[97m❯\x1b[0m \x1b[97m`);
 }
 
 function sendResize() {

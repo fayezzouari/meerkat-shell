@@ -1,7 +1,40 @@
+// Minimal, low-color theme: typed commands are bright white (see the "\r"
+// case in term.onData and PROMPT_TAIL below), everything the daemon sends
+// back — builtin output, pty output, the prompt's cwd — defaults to a
+// muted grey (theme.foreground). Errors stay a desaturated red so they're
+// still distinguishable without breaking the otherwise monochrome look.
+// Real ANSI colors from programs (ls, vim, ...) still work, just through a
+// deliberately desaturated 16-color palette instead of the usual loud
+// terminal defaults, to keep those consistent with the rest of the UI.
 const term = new Terminal({
-  fontFamily: "Menlo, Consolas, monospace",
-  fontSize: 14,
-  theme: { background: "#1e1e1e" },
+  fontFamily: "'JetBrains Mono', Menlo, Consolas, monospace",
+  fontSize: 13,
+  fontWeight: 500,
+  fontWeightBold: 700,
+  cursorStyle: "bar",
+  theme: {
+    background: "#0b0b0c",
+    foreground: "#999999",
+    cursor: "#ffffff",
+    cursorAccent: "#0b0b0c",
+    selectionBackground: "#333333",
+    black: "#0b0b0c",
+    red: "#b06565",
+    green: "#7f9f7f",
+    yellow: "#b0a065",
+    blue: "#6580b0",
+    magenta: "#9a75ad",
+    cyan: "#65a0a0",
+    white: "#cccccc",
+    brightBlack: "#666666",
+    brightRed: "#d98a8a",
+    brightGreen: "#a3c9a3",
+    brightYellow: "#d9c98a",
+    brightBlue: "#8aa8d9",
+    brightMagenta: "#c2a3d9",
+    brightCyan: "#8ac9c9",
+    brightWhite: "#ffffff",
+  },
   cursorBlink: true,
 });
 const fitAddon = new FitAddon.FitAddon();
@@ -22,8 +55,13 @@ let bannerSeen = false;
 // echoes them back, exactly like a real terminal.
 let jobRunning = false;
 
+// Minimal prompt: cwd in the default muted grey, a plain white arrow, then
+// switches to bright white (left active, no trailing reset) so everything
+// typed next — the command itself — reads white against the grey output
+// around it. \x1b[0m up front guards against a program leaving the
+// terminal mid-SGR-state on exit.
 function prompt() {
-  term.write(`\r\n\x1b[36mmeerkat\x1b[0m \x1b[33m${cwd}\x1b[0m> `);
+  term.write(`\x1b[0m\r\n${cwd} \x1b[97m❯\x1b[0m \x1b[97m`);
 }
 
 function sendResize() {
@@ -165,7 +203,13 @@ async function handleTab() {
   const suffix = commonPrefix.slice(word.length);
   if (suffix.length > 0) insertText(suffix);
 
-  term.write("\r\n" + candidates.join("  "));
+  // Candidates come back as full tokens (dir prefix included — needed for
+  // the suffix math above), but showing "prontooo/x  prontooo/y  ..." is
+  // just noise once you're already inside prontooo/ — display only the
+  // part past the directory `word` itself is completing within.
+  const dirLen = word.lastIndexOf("/") + 1;
+  const displayCandidates = candidates.map((c) => c.slice(dirLen));
+  term.write("\r\n" + displayCandidates.join("    "));
   prompt();
   term.write(currentLine);
   if (currentLine.length > cursorPos) {
@@ -226,8 +270,9 @@ term.onData((data) => {
     // real terminal does — whatever the command prints next (raw pty
     // output, unlike the old O:/E: lines) has no idea where our locally
     // echoed command text left the cursor, and won't send a leading
-    // newline of its own.
-    term.write("\r\n");
+    // newline of its own. \x1b[0m drops the white "typing" color set by
+    // prompt() so results print in the default grey (or their own colors).
+    term.write("\x1b[0m\r\n");
     window.go.main.App.SendLine(currentLine);
     jobRunning = true;
     currentLine = "";

@@ -7,6 +7,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
@@ -24,6 +25,50 @@ import (
 // builtins mirrors MeerkatDaemon.Evaluator's @builtins — kept here only so
 // Tab completion knows about them, not to duplicate any execution logic.
 var builtins = []string{"cd", "exit", "quit", "jobs", "fg", "bg", "kill", "stop"}
+
+// Wire protocol: 4-byte big-endian length prefix, then a payload whose
+// first byte is a type tag — matches meerkat-daemon's `packet: 4` socket
+// (see meerkat_daemon/connection.ex). meerkat-daemon added real pty
+// support for foreground commands, which needs raw unbuffered output (see
+// the "P" case below) — meerkat-client speaks the same framing to stay
+// compatible, but doesn't put the local terminal into raw mode or forward
+// keystrokes to a running job's pty, so full-screen programs (vim, htop)
+// aren't usable from here. That interactive experience lives in
+// meerkat-app only; this client keeps its existing line-oriented REPL feel.
+const (
+	msgLine   = 'L'
+	msgStdout = 'O'
+	msgStderr = 'E'
+	msgCwd    = 'D'
+	msgPty    = 'P'
+	msgExit   = 'X'
+)
+
+func writeFrame(w io.Writer, msgType byte, payload []byte) error {
+	frame := make([]byte, 4+1+len(payload))
+	binary.BigEndian.PutUint32(frame[:4], uint32(1+len(payload)))
+	frame[4] = msgType
+	copy(frame[5:], payload)
+	_, err := w.Write(frame)
+	return err
+}
+
+// readFrame blocks for the next frame. ok=false once the connection closes.
+func readFrame(r *bufio.Reader) (msgType byte, payload []byte, ok bool) {
+	var lenBuf [4]byte
+	if _, err := io.ReadFull(r, lenBuf[:]); err != nil {
+		return 0, nil, false
+	}
+	n := binary.BigEndian.Uint32(lenBuf[:])
+	if n == 0 {
+		return 0, nil, false
+	}
+	buf := make([]byte, n)
+	if _, err := io.ReadFull(r, buf); err != nil {
+		return 0, nil, false
+	}
+	return buf[0], buf[1:], true
+}
 
 func socketPath() string {
 	if p := os.Getenv("MEERKAT_SOCK"); p != "" {
@@ -110,12 +155,12 @@ func main() {
 	}
 	defer conn.Close()
 
-	server := bufio.NewScanner(conn)
+	server := bufio.NewReader(conn)
 	cwd := "~"
 
-	// Initial "D:" banner sent by the daemon on connect.
-	if server.Scan() {
-		cwd = handleLine(server.Text(), cwd)
+	// Initial "D" banner sent by the daemon on connect.
+	if msgType, payload, ok := readFrame(server); ok && msgType == msgCwd {
+		cwd = string(payload)
 	}
 
 	completer := &pathCompleter{cwd: &cwd}
@@ -151,20 +196,26 @@ func main() {
 			continue
 		}
 
-		if _, err := fmt.Fprintln(conn, line); err != nil {
+		if err := writeFrame(conn, msgLine, []byte(line)); err != nil {
 			fmt.Fprintln(os.Stderr, "meerkat-client: lost connection to daemon:", err)
 			break
 		}
 
 		done := false
-		for !done && server.Scan() {
+		closed := false
+		for !done {
+			msgType, payload, ok := readFrame(server)
+			if !ok {
+				closed = true
+				break
+			}
 			var newCwd string
-			newCwd, done = processResponseLine(server.Text(), cwd)
+			newCwd, done = processResponseFrame(msgType, payload)
 			if newCwd != "" {
 				cwd = newCwd
 			}
 		}
-		if !done && server.Err() == nil {
+		if closed {
 			break // daemon closed the socket (we sent exit/quit)
 		}
 	}
@@ -174,25 +225,23 @@ func promptFor(cwd string) string {
 	return fmt.Sprintf("meerkat %s> ", shorten(cwd))
 }
 
-// handleLine is only used for the very first banner line before the REPL loop starts.
-func handleLine(line, cwd string) string {
-	if strings.HasPrefix(line, "D:") {
-		return strings.TrimPrefix(line, "D:")
-	}
-	return cwd
-}
-
-// processResponseLine prints one protocol line and reports whether it was
-// the terminating "X:" line for this command.
-func processResponseLine(line, cwd string) (newCwd string, done bool) {
-	switch {
-	case strings.HasPrefix(line, "O:"):
-		fmt.Println(strings.TrimPrefix(line, "O:"))
-	case strings.HasPrefix(line, "E:"):
-		fmt.Fprintln(os.Stderr, strings.TrimPrefix(line, "E:"))
-	case strings.HasPrefix(line, "D:"):
-		newCwd = strings.TrimPrefix(line, "D:")
-	case strings.HasPrefix(line, "X:"):
+// processResponseFrame prints one protocol frame and reports whether it was
+// the terminating "X" frame for this command. "P" (raw pty output) is
+// written straight to stdout as-is — this client doesn't put the local
+// terminal into raw mode, so it's not a fully interactive pty experience,
+// but foreground command output (including color/formatting a real
+// terminal would trigger, like `ls`'s column layout) still displays.
+func processResponseFrame(msgType byte, payload []byte) (newCwd string, done bool) {
+	switch msgType {
+	case msgStdout:
+		fmt.Println(string(payload))
+	case msgStderr:
+		fmt.Fprintln(os.Stderr, string(payload))
+	case msgPty:
+		os.Stdout.Write(payload)
+	case msgCwd:
+		newCwd = string(payload)
+	case msgExit:
 		done = true
 	}
 	return newCwd, done

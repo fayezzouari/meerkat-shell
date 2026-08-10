@@ -73,6 +73,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
       initialCwd: inheritCwd,
       onNewTabRequested: () => newTab(),
       onToggleOverlayRequested: () => onToggleOverlay(),
+      onSessionEnded: (id) => handleSessionEnded(id),
     });
 
     sessions.push({ id: session.id, session, paneEl });
@@ -110,6 +111,18 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     } else {
       renderTabBar();
     }
+  }
+
+  // The daemon connection for tab `id` closed — typing `exit`/`quit`, the
+  // daemon dying, whatever. Same as a real terminal: the tab whose shell
+  // just ended closes immediately, and if it was the last one, the whole
+  // app quits rather than leaving an empty window with no tabs.
+  function handleSessionEnded(id) {
+    if (sessions.length <= 1) {
+      window.runtime.Quit();
+      return;
+    }
+    closeTab(id);
   }
 
   function list() {

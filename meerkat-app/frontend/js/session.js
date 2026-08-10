@@ -19,11 +19,17 @@ import { locationFor } from "./promptInfo.js";
 // Ctrl+M, intercepted here (per-Terminal, see attachCustomKeyEventHandler
 // below) and left to sessionManager/jobsOverlay to actually act on, so
 // this module doesn't need to know about tabs-plural or the overlay.
+// `onSessionEnded` is called whenever the daemon connection closes for any
+// reason (typing `exit`/`quit`, the daemon process dying, ...) — same
+// "this shell is done" signal a real terminal reacts to by closing the
+// tab (or quitting the app, if it was the last one); sessionManager
+// decides which.
 export async function createSession({
   container,
   initialCwd,
   onNewTabRequested,
   onToggleOverlayRequested,
+  onSessionEnded,
 }) {
   const term = new Terminal(terminalOptions);
   const fitAddon = new FitAddon.FitAddon();
@@ -93,7 +99,11 @@ export async function createSession({
       }
     },
     onPty: (bytes) => term.write(bytes),
-    onClosed: () => term.writeln("\r\n\x1b[90m[daemon connection closed]\x1b[0m"),
+    // No message written here — the tab is about to close (or the whole
+    // app is about to quit) either way, same as a real terminal closing a
+    // tab the instant its shell process exits, so there's nothing useful
+    // to show first.
+    onClosed: () => onSessionEnded(id),
   });
   id = info.id;
   cwd = info.cwd || "~";

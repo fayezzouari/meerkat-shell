@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 
 	"meerkat-app/daemonclient"
 
@@ -19,19 +20,35 @@ func NewApp() *App {
 	return &App{}
 }
 
-// startup runs once the Wails runtime and window are ready. Connects to
-// (or lazily spawns) meerkat-daemon exactly like meerkat-client does.
+// startup runs once the Wails runtime and window are ready. It does NOT
+// connect to the daemon — see Connect, which the frontend calls once its
+// own event listeners are registered.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+}
 
+// Connect dials (or lazily spawns) meerkat-daemon and returns the initial
+// working directory. Called from JS after window.runtime.EventsOn listeners
+// are attached, rather than connecting eagerly from startup: the daemon's
+// first "D:<cwd>" line can arrive fast enough to race ahead of the
+// frontend's listener registration, and Wails events aren't buffered — an
+// event emitted before anyone is listening is just lost. Returning the cwd
+// directly sidesteps that race entirely.
+func (a *App) Connect() (string, error) {
 	client, err := daemonclient.Connect()
 	if err != nil {
-		runtime.EventsEmit(ctx, "daemon:error", err.Error())
-		return
+		return "", err
 	}
 	a.client = client
 
+	line, ok := client.ReadLine()
+	cwd := ""
+	if ok && strings.HasPrefix(line, "D:") {
+		cwd = strings.TrimPrefix(line, "D:")
+	}
+
 	go a.readLoop()
+	return cwd, nil
 }
 
 // readLoop forwards every raw protocol line ("O:...", "E:...", "D:...",

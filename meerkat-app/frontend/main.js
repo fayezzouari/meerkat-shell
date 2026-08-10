@@ -4,7 +4,10 @@ const term = new Terminal({
   theme: { background: "#1e1e1e" },
   cursorBlink: true,
 });
+const fitAddon = new FitAddon.FitAddon();
+term.loadAddon(fitAddon);
 term.open(document.getElementById("terminal"));
+fitAddon.fit();
 term.writeln("Meerkat — connecting...");
 
 let cwd = "~";
@@ -12,8 +15,19 @@ let currentLine = "";
 let cursorPos = 0;
 let bannerSeen = false;
 
+// Whether a foreground job is currently running (i.e. an "X:" is still
+// outstanding for the last line we sent). While true, keystrokes go raw
+// to the job's pty via SendInput instead of the local line editor below —
+// the pty (with pty_echo on, see meerkat-daemon's evaluator.ex) is what
+// echoes them back, exactly like a real terminal.
+let jobRunning = false;
+
 function prompt() {
   term.write(`\r\n\x1b[36mmeerkat\x1b[0m \x1b[33m${cwd}\x1b[0m> `);
+}
+
+function sendResize() {
+  window.go.main.App.SendResize(term.rows, term.cols);
 }
 
 // Every raw daemon protocol line arrives here. This is the one place
@@ -27,8 +41,18 @@ window.runtime.EventsOn("daemon:line", (raw) => {
   } else if (raw.startsWith("D:")) {
     cwd = raw.slice(2);
   } else if (raw.startsWith("X:")) {
+    jobRunning = false;
     prompt();
   }
+});
+
+// Raw pty output for the currently-running foreground job — base64-encoded
+// on the Go side since it's arbitrary subprocess bytes, not guaranteed
+// valid UTF-8 text. term.write accepts a Uint8Array directly, so decoding
+// to bytes (rather than a JS string) sidesteps any encoding assumptions.
+window.runtime.EventsOn("daemon:pty", (b64) => {
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  term.write(bytes);
 });
 
 window.runtime.EventsOn("daemon:closed", () => {
@@ -43,18 +67,22 @@ window.go.main.App.Connect()
     bannerSeen = true;
     term.reset();
     prompt();
+    sendResize();
   })
   .catch((err) => {
     term.writeln(`\r\n\x1b[31mConnection error: ${err}\x1b[0m`);
   });
 
-// The daemon has no pty, so there's no kernel tty driver doing local
-// echo/cursor-editing for us — we fake "cooked mode" here, including
-// mid-line cursor movement, word jumps, and Tab completion. This is a
-// deliberate simplification, not a missing feature — see meerkat-daemon's
-// README for the pty/erlexec phase that would let real curses programs
-// (vim, htop, less) work, at which point raw bytes could be forwarded on
-// every keystroke instead.
+window.addEventListener("resize", () => {
+  fitAddon.fit();
+  sendResize();
+});
+
+// Command lines are still composed locally (echo, backspace, cursor
+// movement, tab completion) — the daemon never sees any of it until Enter
+// sends the full line. Once a job is running, none of this local editing
+// applies: see the `jobRunning` branch in term.onData below, which instead
+// forwards every keystroke raw to the job's pty.
 
 function insertText(text) {
   const after = currentLine.slice(cursorPos);
@@ -184,8 +212,24 @@ function handleEscape(data) {
 }
 
 term.onData((data) => {
+  if (jobRunning) {
+    // A program is running and owns the pty now — forward every keystroke
+    // raw, including control bytes (Ctrl+C, Ctrl+Z, ...), exactly like a
+    // real terminal would. The pty's own line discipline / the program
+    // itself interprets them; no local editing applies here.
+    window.go.main.App.SendInput(data);
+    return;
+  }
+
   if (data === "\r") {
+    // Move to a fresh line locally the instant Enter is pressed, like a
+    // real terminal does — whatever the command prints next (raw pty
+    // output, unlike the old O:/E: lines) has no idea where our locally
+    // echoed command text left the cursor, and won't send a leading
+    // newline of its own.
+    term.write("\r\n");
     window.go.main.App.SendLine(currentLine);
+    jobRunning = true;
     currentLine = "";
     cursorPos = 0;
     return;
@@ -213,8 +257,8 @@ term.onData((data) => {
     return;
   }
   if (data.charCodeAt(0) < 32) {
-    // Other control chars (Ctrl+C, Ctrl+D, ...) — real handling arrives
-    // with job control.
+    // Other control chars while composing a line (Ctrl+C, Ctrl+D, ...) —
+    // no running job to send them to, so there's nothing to do with them.
     return;
   }
   insertText(data);

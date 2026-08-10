@@ -22,3 +22,6 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 meerkat-*.tar
 
+# ElixirLS language server cache
+/.elixir_ls/
+

@@ -66,6 +66,21 @@ func dial(path string) (net.Conn, error) {
 	return net.DialTimeout("unix", path, 500*time.Millisecond)
 }
 
+// ConnectExisting dials the daemon directly, without the spawn-if-missing
+// logic Connect uses. For callers that already know the daemon is up
+// (e.g. opening a second tab after the first one already connected
+// successfully) — spawn-if-missing is a "just in case" for the very first
+// connection of the process; running it again for every subsequent
+// connection risks two callers racing to spawn `mix run` concurrently if
+// they're called close together before the first spawn finishes.
+func ConnectExisting() (*Client, error) {
+	conn, err := dial(SocketPath())
+	if err != nil {
+		return nil, err
+	}
+	return wrap(conn), nil
+}
+
 // Connect dials the daemon, spawning it detached first if nothing answers.
 // Identical behavior to meerkat-client's ensureDaemon — same env vars,
 // same 8s window, same log file convention — so both frontends feel

@@ -46,9 +46,15 @@ func (a *App) GitInfo(cwd string) GitStatus {
 		branch, _ = runGit(cwd, "rev-parse", "--short", "HEAD")
 	}
 
+	// git computes this internally rather than us diffing `root` against
+	// `cwd` ourselves — --show-toplevel resolves symlinks in its output,
+	// but `cwd` (as tracked by meerkat-daemon) may not be (e.g. on macOS
+	// /tmp and /var are themselves symlinks to /private/...), which made
+	// a naive filepath.Rel(root, cwd) produce a nonsensical "../../.."
+	// result even when cwd was exactly the repo root.
 	subpath := ""
-	if rel, err := filepath.Rel(root, cwd); err == nil && rel != "." {
-		subpath = "/" + rel
+	if prefix, err := runGit(cwd, "rev-parse", "--show-prefix"); err == nil && prefix != "" {
+		subpath = "/" + strings.TrimSuffix(prefix, "/")
 	}
 
 	return GitStatus{Repo: filepath.Base(root), Branch: branch, Subpath: subpath}

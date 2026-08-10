@@ -41,7 +41,7 @@ export function createJobsOverlay(sessionManager) {
   }
 
   function renderJobs(jobs) {
-    if (jobs.length === 0) return `<div class="overlay-empty">no jobs</div>`;
+    if (jobs.length === 0) return `<div class="overlay-empty">no active jobs</div>`;
     return jobs
       .map((j) => {
         const exit = j.exitCode === null || j.exitCode === undefined ? "" : ` (exit ${j.exitCode})`;
@@ -83,7 +83,10 @@ export function createJobsOverlay(sessionManager) {
     visible = true;
     root.classList.remove("hidden");
     const [jobs, sessions] = await Promise.all([daemon.listJobs().catch(() => []), sessionManager.list()]);
-    render(sessions, jobs);
+    // "done" jobs pile up over a session and aren't actionable — this is
+    // meant to be a live view of what's actually going on, not a history.
+    const activeJobs = jobs.filter((j) => j.status === "running" || j.status === "stopped");
+    render(sessions, activeJobs);
   }
 
   function close() {

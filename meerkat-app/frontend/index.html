@@ -31,15 +31,15 @@
         background: #0b0b0c;
         border-bottom: 1px solid #222;
         -webkit-app-region: drag;
-        min-height: 30px;
+        min-height: 44px;
       }
       .tab {
         -webkit-app-region: no-drag;
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 6px 10px;
-        font-size: 12px;
+        gap: 10px;
+        padding: 10px 16px;
+        font-size: 14px;
         color: #707070;
         border-right: 1px solid #1c1c1c;
         cursor: pointer;
@@ -51,10 +51,19 @@
         border-bottom: 2px solid #4dc4c4;
       }
       .tab-close {
-        color: #555;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        font-size: 15px;
+        line-height: 1;
+        color: #666;
       }
       .tab-close:hover {
         color: #e05c5c;
+        background: #2a1c1c;
       }
 
       /* Panes */

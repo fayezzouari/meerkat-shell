@@ -1,6 +1,7 @@
 import { terminalOptions } from "./js/theme.js";
 import { createLineEditor } from "./js/lineEditor.js";
 import { createCompletionMenu } from "./js/completion.js";
+import { createHistory } from "./js/history.js";
 import * as daemon from "./js/daemonClient.js";
 import { locationFor } from "./js/promptInfo.js";
 
@@ -30,6 +31,7 @@ document.fonts.ready.then(() => {
 
 const editor = createLineEditor(term);
 const completion = createCompletionMenu(term, editor);
+const history = createHistory();
 
 let cwd = "~";
 
@@ -122,6 +124,13 @@ function handleEscape(data) {
     case "\x1bOF":
     case "\x1b[4~":
       editor.moveCursorTo(editor.getLine().length);
+      return;
+    // Up/Down — browse command history.
+    case "\x1b[A":
+      history.up(editor);
+      return;
+    case "\x1b[B":
+      history.down(editor);
       return;
     default:
       return; // unrecognized escape sequence — ignore rather than insert garbage

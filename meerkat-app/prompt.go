@@ -20,18 +20,20 @@ func (a *App) HomeDir() string {
 }
 
 // GitStatus is what the frontend needs to swap the prompt's path display
-// for "<repo> <branch>" when cwd is inside a git working tree.
+// for "<repo> <branch> <subpath>" when cwd is inside a git working tree.
 type GitStatus struct {
-	Repo   string `json:"repo"`
-	Branch string `json:"branch"`
+	Repo    string `json:"repo"`
+	Branch  string `json:"branch"`
+	Subpath string `json:"subpath"` // cwd's path relative to the repo root, with a leading "/"; "" at the root itself
 }
 
-// GitInfo reports the repo name (the git root directory's basename) and
-// current branch for cwd, or a zero-value GitStatus if cwd isn't inside a
-// git working tree. Shells out to the `git` binary rather than reading
-// .git/ directly — same "call an OS command from the GUI's own Go process"
-// pattern complete.go already uses for tab completion, since this runs on
-// the same machine as the directories it's inspecting.
+// GitInfo reports the repo name (the git root directory's basename),
+// current branch, and cwd's path relative to the repo root, or a
+// zero-value GitStatus if cwd isn't inside a git working tree. Shells out
+// to the `git` binary rather than reading .git/ directly — same "call an
+// OS command from the GUI's own Go process" pattern complete.go already
+// uses for tab completion, since this runs on the same machine as the
+// directories it's inspecting.
 func (a *App) GitInfo(cwd string) GitStatus {
 	root, err := runGit(cwd, "rev-parse", "--show-toplevel")
 	if err != nil || root == "" {
@@ -44,7 +46,12 @@ func (a *App) GitInfo(cwd string) GitStatus {
 		branch, _ = runGit(cwd, "rev-parse", "--short", "HEAD")
 	}
 
-	return GitStatus{Repo: filepath.Base(root), Branch: branch}
+	subpath := ""
+	if rel, err := filepath.Rel(root, cwd); err == nil && rel != "." {
+		subpath = "/" + rel
+	}
+
+	return GitStatus{Repo: filepath.Base(root), Branch: branch, Subpath: subpath}
 }
 
 func runGit(cwd string, args ...string) (string, error) {

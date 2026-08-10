@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -186,6 +187,9 @@ type JobInfo struct {
 	Status   string `json:"status"`
 	Cmd      string `json:"cmd"`
 	ExitCode *int   `json:"exitCode"`
+	MemoryKB *int   `json:"memoryKB"`
+	osPid    int
+	hasOsPid bool
 }
 
 // ListJobs asks the daemon for the current `jobs` table — shared by every
@@ -215,6 +219,15 @@ func (a *App) ListJobs() ([]JobInfo, error) {
 		}
 		if msgType == daemonclient.MsgStdout {
 			if job, ok := parseJobLine(string(payload)); ok {
+				// Only a running or stopped job has a live OS process to
+				// measure — a "done" job's os_pid, even though the daemon
+				// still reports it, no longer refers to anything, and a
+				// fresh "ps" query for it would just come back empty.
+				if job.hasOsPid && (job.Status == "running" || job.Status == "stopped") {
+					if kb, ok := processTreeRSSKB(job.osPid); ok {
+						job.MemoryKB = &kb
+					}
+				}
 				jobs = append(jobs, job)
 			}
 		}
@@ -223,7 +236,7 @@ func (a *App) ListJobs() ([]JobInfo, error) {
 }
 
 // parseJobLine parses one line of the `jobs` builtin's output:
-// "[<id>] <status>[ (exit <code>)]\t<cmd>" — see evaluator.ex's
+// "[<id>] <status>[ (exit <code>)]\t<cmd>\t<os_pid>" — see evaluator.ex's
 // builtin("jobs", ...). The no-jobs case ("no jobs", no leading "[") just
 // doesn't match and is correctly skipped rather than added as a row.
 func parseJobLine(line string) (JobInfo, bool) {
@@ -240,11 +253,21 @@ func parseJobLine(line string) (JobInfo, bool) {
 	}
 
 	rest := strings.TrimPrefix(line[closeBracket+1:], " ")
-	tab := strings.IndexByte(rest, '\t')
-	if tab < 0 {
+	firstTab := strings.IndexByte(rest, '\t')
+	if firstTab < 0 {
 		return JobInfo{}, false
 	}
-	status, cmd := rest[:tab], rest[tab+1:]
+	status := rest[:firstTab]
+
+	cmd := rest[firstTab+1:]
+	osPid, hasOsPid := 0, false
+	if secondTab := strings.IndexByte(cmd, '\t'); secondTab >= 0 {
+		osPidStr := cmd[secondTab+1:]
+		cmd = cmd[:secondTab]
+		if p, err := strconv.Atoi(osPidStr); err == nil {
+			osPid, hasOsPid = p, true
+		}
+	}
 
 	var exitCode *int
 	if i := strings.Index(status, " (exit "); i >= 0 {
@@ -255,7 +278,57 @@ func parseJobLine(line string) (JobInfo, bool) {
 		status = status[:i]
 	}
 
-	return JobInfo{Id: id, Status: status, Cmd: cmd, ExitCode: exitCode}, true
+	return JobInfo{Id: id, Status: status, Cmd: cmd, ExitCode: exitCode, osPid: osPid, hasOsPid: hasOsPid}, true
+}
+
+// processTreeRSSKB sums RSS (in KB) for osPid and every descendant of it.
+// erlexec does NOT give each job its own OS process group — every process
+// it spawns shares the port driver's single process group — so a
+// group-based query would wrongly sum every running job together instead
+// of isolating this one. Walking the actual pid/ppid tree instead
+// captures a whole `cmd1 | cmd2` pipeline's memory (each stage is a child
+// of osPid, or of `sh`, which is osPid's parent when it wasn't exec'd
+// away — see parseJobLine's doc comment) without that cross-contamination.
+func processTreeRSSKB(osPid int) (int, bool) {
+	out, err := exec.Command("ps", "-axo", "pid,ppid,rss").Output()
+	if err != nil {
+		return 0, false
+	}
+
+	type proc struct{ ppid, rss int }
+	procs := make(map[int]proc)
+	children := make(map[int][]int)
+
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines[1:] { // skip the header row
+		fields := strings.Fields(line)
+		if len(fields) != 3 {
+			continue
+		}
+		pid, err1 := strconv.Atoi(fields[0])
+		ppid, err2 := strconv.Atoi(fields[1])
+		rss, err3 := strconv.Atoi(fields[2])
+		if err1 != nil || err2 != nil || err3 != nil {
+			continue
+		}
+		procs[pid] = proc{ppid: ppid, rss: rss}
+		children[ppid] = append(children[ppid], pid)
+	}
+
+	if _, ok := procs[osPid]; !ok {
+		return 0, false
+	}
+
+	total := 0
+	var visit func(pid int)
+	visit = func(pid int) {
+		total += procs[pid].rss
+		for _, child := range children[pid] {
+			visit(child)
+		}
+	}
+	visit(osPid)
+	return total, true
 }
 
 func (a *App) shutdown(_ context.Context) {

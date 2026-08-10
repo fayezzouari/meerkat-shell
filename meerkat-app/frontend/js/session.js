@@ -224,26 +224,67 @@ export async function createSession({
     editor.insertText(data);
   });
 
-  // Intercepts Ctrl+T/Ctrl+M before xterm.js converts them to bytes. This
-  // isn't just cleaner than checking in onData — it's required for
-  // Ctrl+M: that's ASCII 0x0D, identical to Enter/"\r", so without
-  // catching the raw KeyboardEvent here (which still distinguishes
-  // ctrlKey+key:"m" from a plain Enter press) a physical Ctrl+M would
-  // otherwise just submit the current line instead of opening the
-  // overlay. Returning false tells xterm.js to swallow the event
-  // entirely — it never reaches onData.
+  // Intercepts a handful of combos before xterm.js converts them to bytes
+  // — needed rather than checking in onData for two different reasons:
+  //
+  // - Cmd+M is ASCII 0x0D, identical to Enter/"\r", so without catching
+  //   the raw KeyboardEvent here (which still distinguishes metaKey+
+  //   key:"m" from a plain Enter press) a physical Cmd+M would otherwise
+  //   just submit the current line instead of opening the overlay.
+  // - Cmd+Left/Right and Option+Left/Right aren't reliably turned into a
+  //   distinguishable escape sequence by xterm.js's default keymap at
+  //   all (unlike Ctrl combos), so there's nothing for onData/handleEscape
+  //   to reliably key off of — reading event.metaKey/altKey/key directly
+  //   is the only robust way to catch them.
+  //
+  // Returning false tells xterm.js to swallow the event entirely — it
+  // never reaches onData. Line-editing shortcuts (word/line jumps) only
+  // apply while composing a command with no completion menu open — while
+  // a job is running the pty owns keystrokes (real programs may want
+  // Option+Arrow themselves), and jumping the cursor while a completion
+  // menu is displayed would leave it open but stale.
   term.attachCustomKeyEventHandler((event) => {
-    if (event.type !== "keydown" || event.metaKey || event.altKey) return true;
-    if (event.ctrlKey && event.key.toLowerCase() === "t") {
-      event.preventDefault();
-      onNewTabRequested();
-      return false;
+    if (event.type !== "keydown") return true;
+
+    if (event.metaKey && !event.ctrlKey && !event.altKey) {
+      const key = event.key.toLowerCase();
+      if (key === "t") {
+        event.preventDefault();
+        onNewTabRequested();
+        return false;
+      }
+      if (key === "m") {
+        event.preventDefault();
+        onToggleOverlayRequested();
+        return false;
+      }
+      if (!jobRunning && !completion.isActive()) {
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          editor.moveCursorTo(0);
+          return false;
+        }
+        if (event.key === "ArrowRight") {
+          event.preventDefault();
+          editor.moveCursorTo(editor.getLine().length);
+          return false;
+        }
+      }
     }
-    if (event.ctrlKey && event.key.toLowerCase() === "m") {
-      event.preventDefault();
-      onToggleOverlayRequested();
-      return false;
+
+    if (event.altKey && !event.metaKey && !event.ctrlKey && !jobRunning && !completion.isActive()) {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        editor.moveCursorTo(editor.wordLeftPos(editor.getCursor()));
+        return false;
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        editor.moveCursorTo(editor.wordRightPos(editor.getCursor()));
+        return false;
+      }
     }
+
     return true;
   });
 

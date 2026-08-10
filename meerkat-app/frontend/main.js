@@ -160,6 +160,7 @@ term.onData((data) => {
     // newline of its own. \x1b[0m drops the white "typing" color set by
     // prompt() so results print in the default grey (or their own colors).
     term.write("\x1b[0m\r\n");
+    history.record(editor.getLine());
     daemon.sendLine(editor.getLine());
     jobRunning = true;
     editor.reset();

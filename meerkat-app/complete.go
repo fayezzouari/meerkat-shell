@@ -45,25 +45,68 @@ func (a *App) Complete(word string, cwd string, isCommand bool) []string {
 	return pathCandidates(word, cwd)
 }
 
+// matchTier ranks how `query` matches `name` (both should already be
+// lowercased), lower is better, -1 means no match at all:
+//
+//	0: name starts with query — typing "gi" and getting "git" first
+//	1: query starts right after a name-word separator (-, _, ., /) —
+//	   typing "fr" finds "prontooo-frontend" (matches at the start of the
+//	   "frontend" segment) ranked above...
+//	2: query occurs anywhere else in name — ...e.g. "infra", where "fr"
+//	   is buried mid-word with no separator before it. Still surfaced
+//	   (better to overmatch than to miss a real candidate), just last.
+func matchTier(name, query string) int {
+	if query == "" || strings.HasPrefix(name, query) {
+		return 0
+	}
+	idx := strings.Index(name, query)
+	if idx < 0 {
+		return -1
+	}
+	if isNameSeparator(name[idx-1]) {
+		return 1
+	}
+	return 2
+}
+
+func isNameSeparator(b byte) bool {
+	return b == '-' || b == '_' || b == '.' || b == '/'
+}
+
+// rankedCandidates buckets `items` (already resolved to their display
+// strings) by matchTier against `query`, sorting each tier alphabetically,
+// then concatenates best-tier-first.
+func rankedCandidates(items []string, lowerQuery string, keyOf func(string) string) []string {
+	var tiers [3][]string
+	for _, item := range items {
+		tier := matchTier(strings.ToLower(keyOf(item)), lowerQuery)
+		if tier < 0 {
+			continue
+		}
+		tiers[tier] = append(tiers[tier], item)
+	}
+	var out []string
+	for _, tier := range tiers {
+		sort.Strings(tier)
+		out = append(out, tier...)
+	}
+	return out
+}
+
 func commandCandidates(prefix string) []string {
 	pathCmdsOnce.Do(loadPathCmds)
 
 	seen := make(map[string]bool)
-	var out []string
-	for _, name := range builtins {
-		if strings.HasPrefix(name, prefix) && !seen[name] {
-			seen[name] = true
-			out = append(out, name)
+	var names []string
+	for _, name := range append(append([]string{}, builtins...), pathCmds...) {
+		if seen[name] {
+			continue
 		}
+		seen[name] = true
+		names = append(names, name)
 	}
-	for _, name := range pathCmds {
-		if strings.HasPrefix(name, prefix) && !seen[name] {
-			seen[name] = true
-			out = append(out, name)
-		}
-	}
-	sort.Strings(out)
-	return out
+
+	return rankedCandidates(names, strings.ToLower(prefix), func(s string) string { return s })
 }
 
 func pathCandidates(prefix string, cwd string) []string {
@@ -81,17 +124,16 @@ func pathCandidates(prefix string, cwd string) []string {
 		return nil
 	}
 
-	var out []string
+	names := make(map[string]string, len(entries)) // candidate string -> entry name (for matching)
+	var candidates []string
 	for _, e := range entries {
-		if !strings.HasPrefix(e.Name(), filePart) {
-			continue
-		}
 		cand := dirPart + e.Name()
 		if e.IsDir() {
 			cand += "/"
 		}
-		out = append(out, cand)
+		names[cand] = e.Name()
+		candidates = append(candidates, cand)
 	}
-	sort.Strings(out)
-	return out
+
+	return rankedCandidates(candidates, strings.ToLower(filePart), func(cand string) string { return names[cand] })
 }

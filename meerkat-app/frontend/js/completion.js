@@ -1,9 +1,16 @@
-// Tab-completion menu. First Tab (with >1 match) inserts the common
-// prefix and highlights the first candidate below the prompt; further
-// Tab/Shift+Tab/Left/Right cycle the selection and swap it into the line
-// in place — see cycle()/applySelected() — rather than reprinting the
-// candidate list from scratch each time. Any other key confirms whatever
-// is currently selected and closes the menu.
+// Tab-completion menu. First Tab (with >1 match) selects and inserts the
+// first candidate, highlighted below the prompt; further Tab/Shift+Tab/
+// Left/Right cycle the selection and swap it into the line in place — see
+// cycle()/applySelected() — rather than reprinting the candidate list from
+// scratch each time. Any other key confirms whatever is currently selected
+// and closes the menu.
+//
+// Candidates aren't necessarily prefixed by what was typed — Complete
+// (complete.go) also returns substring matches (so "fr" can find
+// "prontooo-frontend", which contains but doesn't start with "fr") — so
+// completion is always applied by replacing the whole word being
+// completed with the candidate (editor.replaceRange), never by computing
+// and inserting just a "suffix" the way plain prefix-completion could.
 export function createCompletionMenu(term, editor) {
   // { candidates, dirLen, wordStart, index } while a menu is open, else null.
   let state = null;
@@ -29,19 +36,15 @@ export function createCompletionMenu(term, editor) {
     if (!candidates || candidates.length === 0) return;
 
     if (candidates.length === 1) {
-      const suffix = candidates[0].slice(word.length);
-      if (suffix.length > 0) editor.insertText(suffix);
+      editor.replaceRange(wordStart, cursor, candidates[0]);
       return;
     }
 
-    const commonPrefix = longestCommonPrefix(candidates);
-    const suffix = commonPrefix.slice(word.length);
-    if (suffix.length > 0) editor.insertText(suffix);
-
     // Candidates come back as full tokens (dir prefix included — needed
-    // for the suffix math above), but showing "prontooo/x  prontooo/y
-    // ..." is just noise once you're already inside prontooo/ — display
-    // only the part past the directory `word` itself is completing within.
+    // so applySelected can drop them straight into the line), but showing
+    // "prontooo/x  prontooo/y ..." is just noise once you're already
+    // inside prontooo/ — display only the part past the directory `word`
+    // itself is completing within.
     state = { candidates, dirLen: word.lastIndexOf("/") + 1, wordStart, index: -1 };
     cycle(1);
   }
@@ -115,15 +118,6 @@ export function createCompletionMenu(term, editor) {
     }
     close();
     return false;
-  }
-
-  function longestCommonPrefix(strs) {
-    if (strs.length === 0) return "";
-    let p = strs[0];
-    for (let i = 1; i < strs.length && p !== ""; i++) {
-      while (!strs[i].startsWith(p)) p = p.slice(0, -1);
-    }
-    return p;
   }
 
   return { isActive, handleTab, handleKey };

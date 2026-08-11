@@ -27,6 +27,7 @@ const (
 	MsgLine   = 'L' // client -> daemon: one full command line
 	MsgInput  = 'I' // client -> daemon: raw bytes for the running job's pty stdin
 	MsgResize = 'R' // client -> daemon: <<rows::16, cols::16>>
+	MsgKill   = 'K' // client -> daemon: terminate the current foreground job
 	MsgStdout = 'O' // daemon -> client: builtin stdout text
 	MsgStderr = 'E' // daemon -> client: builtin stderr text
 	MsgCwd    = 'D' // daemon -> client: cwd (initial, and after `cd`)
@@ -142,6 +143,14 @@ func (c *Client) SendLine(line string) error {
 // pty stdin (keystrokes, including control bytes like Ctrl+C/Ctrl+Z).
 func (c *Client) SendInput(data []byte) error {
 	return c.writeFrame(MsgInput, data)
+}
+
+// Kill terminates the currently-running foreground job (Ctrl+Z in the
+// GUI — see session.js) — graceful SIGTERM escalating to SIGKILL, same as
+// meerkat's own `kill <id>` builtin. A no-op on the daemon side if no job
+// is running.
+func (c *Client) Kill() error {
+	return c.writeFrame(MsgKill, nil)
 }
 
 // SendResize tells the daemon the client's terminal dimensions changed.

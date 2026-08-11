@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -358,4 +361,66 @@ func (a *App) shutdown(_ context.Context) {
 	for _, client := range a.sessions {
 		client.Close()
 	}
+}
+
+// --- Appearance: background image ------------------------------------
+//
+// The image is chosen through a native dialog and stored by *path* (the
+// frontend keeps the path in localStorage), then re-read into a data URI
+// on each launch by BackgroundImage below. Storing the path rather than
+// the bytes keeps localStorage small — a photo base64'd into it would
+// routinely blow the ~5MB quota — at the cost of the setting breaking if
+// the file is later moved or deleted, which BackgroundImage reports as a
+// plain error rather than silently.
+
+// maxBackgroundImageBytes caps what will be inlined as a data URI. The
+// encoded string is ~4/3 the file size and has to be held in memory by
+// both Go and the webview, so an unbounded read here is a real way to
+// wedge the app on a large image.
+const maxBackgroundImageBytes = 16 << 20 // 16 MiB
+
+// PickBackgroundImage opens a native file dialog and returns the chosen
+// path, or "" if the user cancelled.
+func (a *App) PickBackgroundImage() (string, error) {
+	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Choose a background image",
+		Filters: []runtime.FileFilter{{
+			DisplayName: "Images (*.png, *.jpg, *.jpeg, *.gif, *.webp)",
+			Pattern:     "*.png;*.jpg;*.jpeg;*.gif;*.webp",
+		}},
+	})
+}
+
+// BackgroundImage reads `path` and returns it as a data: URI the page can
+// use directly in a CSS url(). A data URI (rather than a file:// URL)
+// because the webview serves the app from Wails' own asset server and
+// won't load arbitrary local files.
+func (a *App) BackgroundImage(path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("cannot read background image: %w", err)
+	}
+	if info.Size() > maxBackgroundImageBytes {
+		return "", fmt.Errorf("background image is %d MB; the limit is %d MB",
+			info.Size()>>20, maxBackgroundImageBytes>>20)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("cannot read background image: %w", err)
+	}
+
+	// Sniffed from the content rather than trusted from the extension —
+	// a mislabelled file would otherwise produce a data URI the webview
+	// silently refuses to render.
+	mime := http.DetectContentType(data)
+	if !strings.HasPrefix(mime, "image/") {
+		return "", fmt.Errorf("%s is not an image (detected %s)", filepath.Base(path), mime)
+	}
+
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data), nil
 }

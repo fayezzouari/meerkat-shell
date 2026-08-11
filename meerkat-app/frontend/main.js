@@ -1,5 +1,5 @@
 import { createSessionManager } from "./js/sessionManager.js";
-import { createJobsOverlay } from "./js/jobsOverlay.js";
+import { createSidebar } from "./js/sidebar.js";
 import { createPreferencesOverlay } from "./js/preferencesOverlay.js";
 import { applyTheme, getThemeId } from "./js/themes.js";
 
@@ -13,8 +13,11 @@ const sessionManager = createSessionManager({
   panesEl: document.getElementById("panes"),
 });
 
-const overlay = createJobsOverlay(sessionManager);
-sessionManager.setOverlayToggle(() => overlay.toggle());
+const sidebar = createSidebar(sessionManager);
+sessionManager.setSidebarToggle(() => sidebar.toggle());
+// The sidebar lists panes, so it has to follow along as they're created,
+// closed, or focused — otherwise it only catches up on its 2s poll.
+sessionManager.setOnLayoutChange(() => sidebar.refresh());
 
 const preferences = createPreferencesOverlay();
 // Emitted by main.go's native "Preferences…" menu item — see menu.go.

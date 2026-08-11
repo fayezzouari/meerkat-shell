@@ -123,10 +123,98 @@
         background: var(--bg-hover);
       }
 
+      /* Sidebar + panes, side by side below the tab bar. */
+      #workspace {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      #sidebar {
+        flex: 0 0 250px;
+        min-height: 0;
+        overflow-y: auto;
+        background: var(--bg);
+        border-right: 1px solid var(--border);
+        padding: 6px 0 12px;
+        box-sizing: border-box;
+      }
+      #sidebar.hidden {
+        display: none;
+      }
+      .sidebar-section + .sidebar-section {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+      }
+      .sidebar-heading {
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        padding: 6px 14px;
+      }
+      .sidebar-row {
+        margin: 0 6px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        font-size: 12px;
+        color: var(--text-dim);
+      }
+      .sidebar-empty {
+        padding: 4px 14px;
+        font-size: 11.5px;
+        color: var(--text-faint);
+      }
+      .sidebar-session {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        cursor: pointer;
+      }
+      .sidebar-session:hover {
+        background: var(--bg-hover);
+        color: var(--text);
+      }
+      .sidebar-session-active {
+        color: var(--text);
+      }
+      .sidebar-marker {
+        flex: 0 0 auto;
+        font-size: 8px;
+        color: var(--accent);
+      }
+      /* Paths are long and the sidebar is narrow — clip from the *left* so
+         the meaningful tail (the directory you're actually in) survives,
+         rather than the "/Users/..." prefix every row shares. */
+      .sidebar-label {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        direction: rtl;
+        text-align: left;
+      }
+      .sidebar-job-top {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+      }
+      .sidebar-job .job-cmd {
+        display: block;
+        margin-top: 2px;
+        font-family: "JetBrains Mono", Menlo, monospace;
+        font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
       /* Panes */
       #panes {
         position: relative;
         flex: 1 1 auto;
+        min-width: 0;
         min-height: 0;
         background: var(--bg-raised);
       }
@@ -240,14 +328,15 @@
         border-radius: 4px;
       }
 
-      /* Shared overlay chrome (Ctrl+M jobs/sessions, Preferences) — a
-         softly blurred backdrop and a floating card, no hard borders. */
-      #overlay,
+      /* Preferences modal — the one thing still presented as a floating
+         card over a blurred backdrop (it's a settings dialog, not a
+         working surface). The sessions/jobs view that used to share this
+         chrome is now #sidebar above. */
       #prefs-overlay {
-        /* fixed, not absolute: these are viewport-level modals, and
-           position:absolute made their size depend on the page box —
-           which is what let the blurred backdrop feed back into the
-           document's own scroll height. */
+        /* fixed, not absolute: this is a viewport-level modal, and
+           position:absolute made its size depend on the page box — which
+           is what let the blurred backdrop feed back into the document's
+           own scroll height. */
         position: fixed;
         inset: 0;
         background: var(--backdrop);
@@ -258,7 +347,6 @@
         padding-top: 64px;
         z-index: 10;
       }
-      #overlay.hidden,
       #prefs-overlay.hidden {
         display: none;
       }
@@ -272,11 +360,6 @@
         overflow-y: auto;
         padding: 8px 0 14px;
       }
-      .overlay-section + .overlay-section {
-        border-top: 1px solid var(--border);
-        margin-top: 6px;
-        padding-top: 6px;
-      }
       .overlay-heading {
         font-family: var(--font-display);
         color: var(--text);
@@ -284,28 +367,6 @@
         font-weight: 400;
         letter-spacing: 0.01em;
         padding: 14px 18px 8px;
-      }
-      .overlay-row {
-        padding: 7px 18px;
-        font-size: 13px;
-        color: var(--text-dim);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        border-radius: 8px;
-        margin: 0 6px;
-      }
-      .overlay-session {
-        cursor: pointer;
-      }
-      .overlay-session:hover {
-        background: var(--bg-hover);
-        color: var(--text);
-      }
-      .overlay-empty {
-        padding: 7px 18px;
-        font-size: 13px;
-        color: var(--text-faint);
       }
       .job-id {
         color: var(--text-faint);
@@ -442,7 +503,13 @@
   </head>
   <body>
     <div id="tabbar"></div>
-    <div id="panes"></div>
+    <!-- Sidebar and panes are siblings in a flex row, not stacked layers:
+         opening the sidebar takes width away from the terminals rather
+         than covering them. -->
+    <div id="workspace">
+      <aside id="sidebar" class="hidden"></aside>
+      <div id="panes"></div>
+    </div>
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/lib/xterm.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10/lib/addon-fit.js"></script>
     <script type="module" src="./main.js"></script>

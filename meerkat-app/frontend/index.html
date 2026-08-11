@@ -216,6 +216,49 @@
         color: var(--text-dim);
       }
 
+      /* Theme picker. Each card paints itself in its own preset's colors
+         (set inline from themes.js), so this grid is a live preview —
+         which is why it deliberately uses no --token colors of its own. */
+      .theme-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        padding: 4px 18px 10px;
+      }
+      .theme-card {
+        border: 1px solid;
+        border-radius: 10px;
+        padding: 10px 12px;
+        cursor: pointer;
+        transition: transform 0.12s ease;
+      }
+      .theme-card:hover {
+        transform: translateY(-1px);
+      }
+      .theme-card-active {
+        border-width: 2px;
+        padding: 9px 11px; /* offset the thicker border so cards stay aligned */
+      }
+      .theme-swatches {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 8px;
+      }
+      .theme-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+      .theme-name {
+        font-size: 12.5px;
+        font-weight: 500;
+      }
+      .theme-desc {
+        font-size: 10.5px;
+        line-height: 1.35;
+        margin-top: 2px;
+      }
+
       /* Preferences overlay */
       .prefs-panel {
         width: 640px;

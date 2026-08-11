@@ -7,5 +7,8 @@
   "frontend:dev:watcher": "",
   "author": {
     "name": "Fayez"
+  },
+  "info": {
+    "productName": "Meerkat"
   }
 }

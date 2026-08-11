@@ -7,7 +7,7 @@ function escapeHtml(s) {
 
 // Preferences overlay: lists every remappable shortcut (see keymap.js) and
 // lets the user click "Change" then press a new combo to rebind it. Same
-// plain DOM/CSS approach as jobsOverlay.js — opened from the native App
+// plain DOM/CSS approach as sidebar.js — opened from the native App
 // menu's "Preferences…" item (main.js listens for the "preferences:open"
 // Wails event) rather than a keyboard shortcut of its own, since Cmd+, is
 // already claimed by macOS convention for exactly this and Wails routes it

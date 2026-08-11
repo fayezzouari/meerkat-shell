@@ -26,10 +26,19 @@ export function createSessionManager({ tabBarEl, panesEl }) {
   const tabs = []; // { id, rootEl, root, activeLeafId }
   let activeTabId = null;
   let nextTabId = 1;
-  let onToggleOverlay = () => {};
+  let onToggleSidebar = () => {};
+  let onLayoutChange = () => {};
 
-  function setOverlayToggle(fn) {
-    onToggleOverlay = fn;
+  function setSidebarToggle(fn) {
+    onToggleSidebar = fn;
+  }
+
+  // Called whenever the set of panes or which one is focused changes, so
+  // the sidebar's pane list can follow along instead of waiting for its
+  // next poll. Routed through renderTabBar, which every one of those
+  // mutations already calls.
+  function setOnLayoutChange(fn) {
+    onLayoutChange = fn;
   }
 
   // --- tab/leaf lookup -------------------------------------------------
@@ -170,6 +179,8 @@ export function createSessionManager({ tabBarEl, panesEl }) {
       tabEl.addEventListener("click", () => switchToTab(tab.id));
       tabBarEl.appendChild(tabEl);
     });
+
+    onLayoutChange();
   }
 
   // Short tab label — the cwd's last path segment (e.g. "meerkat" for
@@ -191,7 +202,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
       container: paneEl,
       initialCwd,
       onNewTabRequested: () => newTab(),
-      onToggleOverlayRequested: () => onToggleOverlay(),
+      onToggleSidebarRequested: () => onToggleSidebar(),
       onSplitRequested: (dir) => splitActive(dir),
       onSessionEnded: (id) => handleSessionEnded(id),
     });
@@ -402,6 +413,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     closeTab,
     list,
     activeId: () => activeTab()?.activeLeafId ?? null,
-    setOverlayToggle,
+    setSidebarToggle,
+    setOnLayoutChange,
   };
 }

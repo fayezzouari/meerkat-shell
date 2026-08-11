@@ -17,10 +17,11 @@ import { onThemeChange } from "./themes.js";
 // owns creating/showing/hiding these). `initialCwd`, if given, is sent as
 // a `cd` right after connecting (new tabs inherit the active tab's cwd —
 // see sessionManager.js) rather than always starting at $HOME.
-// `onNewTabRequested`/`onToggleOverlayRequested` are called for Ctrl+T /
-// Ctrl+M, intercepted here (per-Terminal, see attachCustomKeyEventHandler
-// below) and left to sessionManager/jobsOverlay to actually act on, so
-// this module doesn't need to know about tabs-plural or the overlay.
+// `onNewTabRequested`/`onToggleSidebarRequested`/`onSplitRequested` are
+// called for the Cmd+T / Cmd+B / Cmd+D(+Shift) bindings, intercepted here
+// (per-Terminal, see attachCustomKeyEventHandler below) and left to
+// sessionManager/sidebar to actually act on, so this module doesn't need
+// to know about tabs-plural, splits, or the sidebar.
 // `onSessionEnded` is called whenever the daemon connection closes for any
 // reason (typing `exit`/`quit`, the daemon process dying, ...) — same
 // "this shell is done" signal a real terminal reacts to by closing the
@@ -30,7 +31,7 @@ export async function createSession({
   container,
   initialCwd,
   onNewTabRequested,
-  onToggleOverlayRequested,
+  onToggleSidebarRequested,
   onSplitRequested,
   onSessionEnded,
 }) {
@@ -381,9 +382,9 @@ export async function createSession({
       onNewTabRequested();
       return false;
     }
-    if (keymap.matches(event, "toggleJobsOverlay")) {
+    if (keymap.matches(event, "toggleSidebar")) {
       event.preventDefault();
-      onToggleOverlayRequested();
+      onToggleSidebarRequested();
       return false;
     }
     // Checked before splitRight: with the default bindings the two differ

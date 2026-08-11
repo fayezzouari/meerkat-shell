@@ -76,6 +76,20 @@
         min-height: 44px;
         box-sizing: border-box;
       }
+      /* Brand mark, pinned to the tab bar's left edge. Deliberately has
+         no no-drag override: it's decoration, so it stays part of the
+         title bar's drag region rather than becoming a dead spot. */
+      #brand {
+        flex: 0 0 auto;
+        height: 22px;
+        width: auto;
+        /* The bar is align-items:flex-end, so this bottom margin is what
+           lifts the mark off the baseline to sit optically level with
+           the tab labels rather than with the tabs' lower edge. */
+        margin: 0 10px 6px 2px;
+        -webkit-user-drag: none;
+        user-select: none;
+      }
       .tab {
         -webkit-app-region: no-drag;
         display: flex;
@@ -502,7 +516,11 @@
     </style>
   </head>
   <body>
-    <div id="tabbar"></div>
+    <!-- The mark is static markup rather than something renderTabBar
+         emits, so it survives the tab list being re-rendered. -->
+    <div id="tabbar">
+      <img id="brand" src="/assets/meerkat-logo.png" alt="Meerkat" draggable="false" />
+    </div>
     <!-- Sidebar and panes are siblings in a flex row, not stacked layers:
          opening the sidebar takes width away from the terminals rather
          than covering them. -->

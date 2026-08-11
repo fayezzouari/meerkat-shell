@@ -12,6 +12,12 @@ defmodule MeerkatDaemon.Connection do
                     pty stdin (only meaningful while a job is running;
                     ignored otherwise)
       "R" <> <<rows::16, cols::16>>   terminal resize
+      "K"           terminate the current foreground job outright (same as
+                    the `kill <id>` builtin, just addressed at "whatever's
+                    running now" instead of a job id — this is what the
+                    client's Ctrl+Z sends, since without a wired-up
+                    fg/bg this app has no use for a real suspend; ignored
+                    if no job is running)
 
     daemon -> client:
       "O" <> text   stdout line (builtins only — jobs/errors, not pty output)
@@ -83,6 +89,15 @@ defmodule MeerkatDaemon.Connection do
         if state.current, do: :exec.winsz(state.current.os_pid, rows, cols)
         :inet.setopts(socket, active: :once)
         {:noreply, %{state | winsz: {rows, cols}}}
+
+      <<?K>> ->
+        # Same :exec.stop/1 the `kill <id>` builtin uses — graceful SIGTERM,
+        # escalating to SIGKILL if the process doesn't go quietly. The
+        # actual "job's done" signal (the "X" frame) comes the normal way,
+        # through the :DOWN message once the process actually exits.
+        if state.current, do: :exec.stop(state.current.pid)
+        :inet.setopts(socket, active: :once)
+        {:noreply, state}
 
       _unknown ->
         :inet.setopts(socket, active: :once)

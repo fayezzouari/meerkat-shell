@@ -127,6 +127,11 @@ func pathCandidates(prefix string, cwd string) []string {
 	names := make(map[string]string, len(entries)) // candidate string -> entry name (for matching)
 	var candidates []string
 	for _, e := range entries {
+		// Hide dotfiles (.ssh, .profile, ...) unless the user already typed
+		// a leading dot themselves, same as zsh/bash's default behavior.
+		if strings.HasPrefix(e.Name(), ".") && !strings.HasPrefix(filePart, ".") {
+			continue
+		}
 		cand := dirPart + e.Name()
 		if e.IsDir() {
 			cand += "/"

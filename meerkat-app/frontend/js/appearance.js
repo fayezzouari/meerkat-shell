@@ -88,7 +88,17 @@ function withAlpha(hex, alpha) {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
-// The Terminal options implied by the current theme + settings.
+// Terminal options that no setting controls — cursor style and weights.
+const baseTerminalOptions = {
+  fontWeight: 500,
+  fontWeightBold: 700,
+  cursorStyle: "bar",
+  cursorBlink: true,
+};
+
+// The complete Terminal options implied by the current theme + settings.
+// Used both to construct a Terminal and, via Object.assign, to update a
+// live one — so it has to be the full set, not just the parts that change.
 //
 // The canvas background carries the opacity rather than the page behind
 // it, so there's exactly one translucent layer over the wallpaper/desktop
@@ -99,6 +109,7 @@ export function terminalOptionsFor() {
   const s = load();
   const theme = getTheme();
   return {
+    ...baseTerminalOptions,
     fontFamily: fontStackFor(s.fontFamily),
     fontSize: s.fontSize,
     allowTransparency: s.opacity < 1,

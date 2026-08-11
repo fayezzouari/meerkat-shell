@@ -1,4 +1,3 @@
-import { terminalOptions } from "./theme.js";
 import { createLineEditor } from "./lineEditor.js";
 import { createCompletionMenu } from "./completion.js";
 import { createHistory } from "./history.js";
@@ -35,20 +34,24 @@ export async function createSession({
   onSplitRequested,
   onSessionEnded,
 }) {
-  const term = new Terminal(terminalOptions());
+  const term = new Terminal(terminalOptionsFor());
   const fitAddon = new FitAddon.FitAddon();
   term.loadAddon(fitAddon);
   term.open(container);
   fitAddon.fit();
   term.writeln("Meerkat — connecting...");
 
-  // Live-swap this tab's canvas palette when the user picks a different
-  // preset in Preferences. Colors only, so nothing reflows — no re-fit or
-  // resize needs to follow, and scrollback keeps its existing ANSI
-  // attributes (they're stored as palette indices, so already-printed
-  // output recolors to the new preset too).
-  const unsubscribeTheme = onThemeChange((theme) => {
-    term.options.theme = theme.terminal;
+  // Live-apply Preferences changes: color preset, background opacity, and
+  // terminal font (see appearance.js, which composes all three).
+  //
+  // Unlike a pure palette swap, a font change alters the cell size, so the
+  // number of rows/cols that fit changes and the pty has to be told —
+  // hence the fit() rather than just assigning options. It's skipped
+  // before the session id exists, since fit() sends a resize to a
+  // connection that isn't established yet.
+  const unsubscribeAppearance = onAppearanceChange(() => {
+    Object.assign(term.options, terminalOptionsFor());
+    if (id !== null) fit();
   });
 
   const editor = createLineEditor(term);
@@ -467,7 +470,7 @@ export async function createSession({
     focus: () => term.focus(),
     dispose: () => {
       paneObserver.disconnect();
-      unsubscribeTheme();
+      unsubscribeAppearance();
       daemon.closeSession(id);
       term.dispose();
     },

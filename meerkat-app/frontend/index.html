@@ -9,7 +9,7 @@
     />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Instrument+Serif&family=JetBrains+Mono:wght@500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Instrument+Serif&family=JetBrains+Mono:wght@500;700&family=Fira+Code:wght@400;600&family=IBM+Plex+Mono:wght@400;600&family=Source+Code+Pro:wght@400;600&display=swap"
     />
     <style>
       /* These are the "Clay" preset's values, inlined so the first paint
@@ -35,6 +35,14 @@
            against the geometric sans, and the overlay headings are the
            only place in this app with a title to set that way. */
         --font-display: "Instrument Serif", Georgia, serif;
+
+        /* Written by appearance.js from the theme + the user's opacity and
+           background-image settings. Defaults here are the fully-opaque,
+           no-image case, so first paint is correct before JS runs. */
+        --surface: #1b1917;
+        --surface-raised: #232120;
+        --font-mono: "JetBrains Mono", Menlo, monospace;
+        --bg-image: none;
       }
 
       html,
@@ -54,13 +62,34 @@
            overflow, putting a scrollbar on the whole window behind the
            modal instead of just inside it. */
         overflow: hidden;
-        background: var(--bg);
+        /* Transparent, not --bg: the window is created translucent (see
+           main.go), so anything painted here would sit *under* every
+           surface as an extra opaque layer and defeat the opacity
+           setting. Each surface paints its own --surface/--surface-raised
+           instead, giving exactly one translucent layer over whatever is
+           behind the window. */
+        background: transparent;
         font-family: var(--font-ui);
         -webkit-font-smoothing: antialiased;
       }
       body {
         display: flex;
         flex-direction: column;
+      }
+
+      /* The optional background image, behind everything. Fixed and
+         z-index:-1 so it never participates in layout — the app's own
+         surfaces are translucent and composite over it. Empty by default
+         (--bg-image: none), in which case this paints nothing at all and
+         the translucent surfaces show the desktop instead. */
+      #backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        background-image: var(--bg-image);
+        background-size: cover;
+        background-position: center;
+        pointer-events: none;
       }
 
       /* Tab bar — flat, no dividers; the active tab reads by a slightly
@@ -71,7 +100,7 @@
         align-items: flex-end;
         gap: 2px;
         padding: 10px 10px 0;
-        background: var(--bg);
+        background: var(--surface);
         -webkit-app-region: drag;
         min-height: 44px;
         box-sizing: border-box;
@@ -110,7 +139,7 @@
       }
       .tab.active {
         color: var(--text);
-        background: var(--bg-raised);
+        background: var(--surface-raised);
         box-shadow: inset 0 -2px 0 var(--accent);
       }
       .tab-badge {
@@ -148,7 +177,7 @@
         flex: 0 0 250px;
         min-height: 0;
         overflow-y: auto;
-        background: var(--bg);
+        background: var(--surface);
         border-right: 1px solid var(--border);
         padding: 6px 0 12px;
         box-sizing: border-box;
@@ -230,7 +259,10 @@
         flex: 1 1 auto;
         min-width: 0;
         min-height: 0;
-        background: var(--bg-raised);
+        /* Transparent: each pane's xterm canvas paints --surface-raised
+           itself (at the chosen opacity), so tinting here too would
+           double the tint wherever a terminal sits. */
+        background: transparent;
       }
       /* One per tab; holds that tab's split tree. Only the active tab's
          root is displayed (sessionManager toggles display flex/none). */

@@ -251,13 +251,18 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     tab.rootEl.innerHTML = "";
     const box = document.createElement("div");
     box.className = "pane-error";
+    // Deliberately not "can't reach the daemon": anything thrown while
+    // building a session lands here, including plain frontend bugs, and
+    // naming one specific cause sends you looking in the wrong place. The
+    // daemon is only *offered* as the likely cause, below the actual
+    // error text.
     box.innerHTML = `
-      <div class="pane-error-title">Can't reach the meerkat daemon</div>
+      <div class="pane-error-title">Couldn't open this terminal</div>
       <div class="pane-error-detail"></div>
       <div class="pane-error-hint">
-        Start it with <code>./launch.sh</code>, or from
-        <code>meerkat-daemon/</code> run <code>mix run --no-halt</code>.
-        Details are logged to <code>~/.meerkat/daemon.log</code>.
+        If the daemon isn't running, start it with <code>./launch.sh</code>,
+        or from <code>meerkat-daemon/</code> run <code>mix run --no-halt</code>
+        — it logs to <code>~/.meerkat/daemon.log</code>.
       </div>
     `;
     box.querySelector(".pane-error-detail").textContent = String(err?.message || err || "unknown error");

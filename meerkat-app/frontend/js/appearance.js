@@ -100,11 +100,24 @@ const baseTerminalOptions = {
 // Used both to construct a Terminal and, via Object.assign, to update a
 // live one — so it has to be the full set, not just the parts that change.
 //
-// The canvas background carries the opacity rather than the page behind
-// it, so there's exactly one translucent layer over the wallpaper/desktop
-// instead of two stacked tints. allowTransparency is only switched on when
-// it's actually needed: it makes xterm composite every cell, which costs
-// real render time, so a fully opaque terminal shouldn't pay for it.
+// The canvas is always fully transparent and the tint comes from #panes
+// behind it (--surface-raised), rather than the canvas painting its own
+// translucent background. Two bugs forced that split, and both come back
+// if this is "optimised" the other way:
+//
+//   - allowTransparency is a construction-time renderer option in
+//     xterm.js. Deriving it from the current opacity meant a Terminal
+//     built while opaque baked in `false`, and every later opacity change
+//     was silently flattened by the renderer — the setting simply did
+//     nothing until the app restarted. It's now unconditionally true, so
+//     opacity is pure CSS on a layer that can always show through.
+//   - xterm sizes its canvas to a whole number of cells, so a pane
+//     usually has a leftover strip along its right/bottom edge. With the
+//     tint on the canvas, that strip was left unpainted and the desktop
+//     showed through it, reading as a stray border around every terminal.
+//     Painting #panes covers the whole pane, leftover included.
+//
+// Keeping the tint in exactly one layer is what stops it from doubling.
 export function terminalOptionsFor() {
   const s = load();
   const theme = getTheme();
@@ -112,8 +125,8 @@ export function terminalOptionsFor() {
     ...baseTerminalOptions,
     fontFamily: fontStackFor(s.fontFamily),
     fontSize: s.fontSize,
-    allowTransparency: s.opacity < 1,
-    theme: { ...theme.terminal, background: withAlpha(theme.terminal.background, s.opacity) },
+    allowTransparency: true,
+    theme: { ...theme.terminal, background: "rgba(0, 0, 0, 0)" },
   };
 }
 

@@ -41,19 +41,6 @@ export async function createSession({
   fitAddon.fit();
   term.writeln("Meerkat — connecting...");
 
-  // Live-apply Preferences changes: color preset, background opacity, and
-  // terminal font (see appearance.js, which composes all three).
-  //
-  // Unlike a pure palette swap, a font change alters the cell size, so the
-  // number of rows/cols that fit changes and the pty has to be told —
-  // hence the fit() rather than just assigning options. It's skipped
-  // before the session id exists, since fit() sends a resize to a
-  // connection that isn't established yet.
-  const unsubscribeAppearance = onAppearanceChange(() => {
-    Object.assign(term.options, terminalOptionsFor());
-    if (id !== null) fit();
-  });
-
   const editor = createLineEditor(term);
   const completion = createCompletionMenu(term, editor);
   const history = createHistory();
@@ -148,6 +135,24 @@ export async function createSession({
   // @font-face referenced in the document has finished loading, so this
   // re-fits and re-sends the corrected size.
   document.fonts.ready.then(fit);
+
+  // Live-apply Preferences changes: color preset, background opacity, and
+  // terminal font (see appearance.js, which composes all three).
+  //
+  // Unlike a pure palette swap, a font change alters the cell size, so the
+  // number of rows/cols that fit changes and the pty has to be told —
+  // hence the fit() rather than just assigning options. It's skipped
+  // before the session id exists, since fit() sends a resize to a
+  // connection that isn't established yet.
+  //
+  // Registered *here*, below `let id`, and not up beside the Terminal
+  // construction: onAppearanceChange runs its callback immediately, and
+  // reading `id` before its declaration is a temporal dead zone error
+  // ("Cannot access uninitialized variable") that fails the whole session.
+  const unsubscribeAppearance = onAppearanceChange(() => {
+    Object.assign(term.options, terminalOptionsFor());
+    if (id !== null) fit();
+  });
 
   // The window-resize listener in sessionManager.js only catches actual
   // window resizes. A macOS fullscreen toggle (green button / Cmd+Ctrl+F)

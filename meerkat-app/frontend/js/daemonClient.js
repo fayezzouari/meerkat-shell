@@ -64,6 +64,12 @@ export function sendResize(id, rows, cols) {
   return window.go.main.App.SendResize(id, rows, cols);
 }
 
+// Terminates the foreground job running in session `id` outright (Ctrl+Z,
+// by default — see keymap.js).
+export function killJob(id) {
+  return window.go.main.App.KillJob(id);
+}
+
 // Jobs are shared across every tab (one JobManager on the daemon side —
 // see meerkat_daemon/job_manager.ex), so this isn't scoped to any
 // particular session.

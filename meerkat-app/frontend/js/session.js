@@ -4,6 +4,7 @@ import { createCompletionMenu } from "./completion.js";
 import { createHistory } from "./history.js";
 import * as daemon from "./daemonClient.js";
 import { locationFor } from "./promptInfo.js";
+import * as keymap from "./keymap.js";
 
 // Creates one tab: its own daemon connection, xterm.js Terminal, and all
 // the per-session state (line editor, completion menu, history, cwd,
@@ -216,51 +217,73 @@ export async function createSession({
       handleEscape(data);
       return;
     }
-    if (data === "\x01") {
-      // Ctrl+A
-      editor.moveCursorTo(0);
-      return;
-    }
-    if (data === "\x05") {
-      // Ctrl+E
-      editor.moveCursorTo(editor.getLine().length);
-      return;
-    }
     if (data.charCodeAt(0) < 32) {
-      // Other control chars while composing a line (Ctrl+C, Ctrl+D, ...) —
-      // no running job to send them to, so there's nothing to do with them.
+      // Other control chars while composing a line (Ctrl+D, ...) — no
+      // running job to send them to, and no local meaning either. (Ctrl+A/
+      // C/E/Z never reach here — they're caught by keymap-driven combos in
+      // attachCustomKeyEventHandler below, before xterm.js turns them into
+      // data bytes at all.)
       return;
     }
     editor.insertText(data);
   });
 
-  // Intercepts a handful of combos before xterm.js converts them to bytes
-  // — needed rather than checking in onData for two different reasons:
+  // Ctrl+C — the interrupt/cancel shortcut, whatever it's bound to (see
+  // keymap.js). While a job's running, the pty's line discipline is what
+  // actually turns \x03 into SIGINT for the foreground process group (see
+  // meerkat-daemon's evaluator.ex — a real pty in canonical mode); we just
+  // forward the byte. While composing, there's no process to signal, so
+  // this instead does what every shell does on Ctrl+C at an empty/partial
+  // prompt: echo "^C", abandon the line, and start fresh.
+  function doInterrupt() {
+    if (jobRunning) {
+      daemon.sendInput(id, "\x03");
+      return;
+    }
+    if (completion.isActive()) completion.close();
+    term.write("^C\x1b[0m\r\n");
+    editor.reset();
+    prompt();
+  }
+
+  // Ctrl+Z — kills the running foreground job outright (see app.go's
+  // KillJob / meerkat-daemon's "K" message). Real terminals suspend
+  // (SIGTSTP) here, but meerkat has no fg/bg wired up to the GUI, so a
+  // true suspend would just wedge the tab forever with no way to resume —
+  // killing it is what's actually useful. No-op while composing: there's
+  // no foreground job to kill yet.
+  function doKillJob() {
+    if (jobRunning) daemon.killJob(id);
+  }
+
+  // Intercepts every remappable shortcut before xterm.js converts it to
+  // bytes/escape sequences — needed rather than checking in onData, for a
+  // few reasons:
   //
+  // - Ctrl+C/Ctrl+Z need custom local behavior (above) instead of xterm's
+  //   default \x03/\x1a passthrough.
   // - Cmd+M is ASCII 0x0D, identical to Enter/"\r", so without catching
   //   the raw KeyboardEvent here (which still distinguishes metaKey+
   //   key:"m" from a plain Enter press) a physical Cmd+M would otherwise
   //   just submit the current line instead of opening the overlay.
-  // - Cmd+Left/Right and Option+Left/Right aren't reliably turned into a
-  //   distinguishable escape sequence by xterm.js's default keymap at
-  //   all (unlike Ctrl combos), so there's nothing for onData/handleEscape
-  //   to reliably key off of — reading event.metaKey/altKey/key directly
-  //   is the only robust way to catch them.
+  // - Cmd+Left/Right, Option+Left/Right, and the delete variants aren't
+  //   reliably turned into a distinguishable escape sequence by xterm.js's
+  //   default keymap at all, so there's nothing for onData/handleEscape to
+  //   key off of — reading event.ctrlKey/metaKey/altKey/key directly is
+  //   the only robust way to catch them, and it's also exactly the shape
+  //   keymap.matches() compares against (what preferencesOverlay.js
+  //   records when the user rebinds one of these).
   //
   // Returning false tells xterm.js to swallow the event entirely — it
-  // never reaches onData. Line-editing shortcuts (word/line jumps) only
-  // apply while composing a command with no completion menu open — while
-  // a job is running the pty owns keystrokes (real programs may want
-  // Option+Arrow themselves), and jumping the cursor while a completion
-  // menu is displayed would leave it open but stale.
+  // never reaches onData. Line-editing shortcuts (word/line jumps,
+  // deletes) only apply while composing a command with no completion menu
+  // open — while a job is running the pty owns keystrokes (real programs
+  // may want Option+Arrow themselves), and jumping the cursor while a
+  // completion menu is displayed would leave it open but stale.
   term.attachCustomKeyEventHandler((event) => {
     if (event.type !== "keydown") return true;
 
-    // Cmd+Ctrl+F — the standard macOS fullscreen toggle. The window
-    // already supports native fullscreen via the green traffic-light
-    // button (nothing in main.go disables it); this is just the
-    // keyboard-only path every native Mac app also offers.
-    if (event.metaKey && event.ctrlKey && !event.altKey && event.key.toLowerCase() === "f") {
+    if (keymap.matches(event, "toggleFullscreen")) {
       event.preventDefault();
       window.runtime.WindowIsFullscreen().then((isFullscreen) => {
         if (isFullscreen) {
@@ -271,42 +294,68 @@ export async function createSession({
       });
       return false;
     }
-
-    if (event.metaKey && !event.ctrlKey && !event.altKey) {
-      const key = event.key.toLowerCase();
-      if (key === "t") {
-        event.preventDefault();
-        onNewTabRequested();
-        return false;
-      }
-      if (key === "m") {
-        event.preventDefault();
-        onToggleOverlayRequested();
-        return false;
-      }
-      if (!jobRunning && !completion.isActive()) {
-        if (event.key === "ArrowLeft") {
-          event.preventDefault();
-          editor.moveCursorTo(0);
-          return false;
-        }
-        if (event.key === "ArrowRight") {
-          event.preventDefault();
-          editor.moveCursorTo(editor.getLine().length);
-          return false;
-        }
-      }
+    if (keymap.matches(event, "newTab")) {
+      event.preventDefault();
+      onNewTabRequested();
+      return false;
+    }
+    if (keymap.matches(event, "toggleJobsOverlay")) {
+      event.preventDefault();
+      onToggleOverlayRequested();
+      return false;
+    }
+    if (keymap.matches(event, "interrupt")) {
+      event.preventDefault();
+      doInterrupt();
+      return false;
+    }
+    if (keymap.matches(event, "killJob")) {
+      event.preventDefault();
+      doKillJob();
+      return false;
     }
 
-    if (event.altKey && !event.metaKey && !event.ctrlKey && !jobRunning && !completion.isActive()) {
-      if (event.key === "ArrowLeft") {
+    if (!jobRunning && !completion.isActive()) {
+      if (keymap.matches(event, "lineHome")) {
+        event.preventDefault();
+        editor.moveCursorTo(0);
+        return false;
+      }
+      if (keymap.matches(event, "lineEnd")) {
+        event.preventDefault();
+        editor.moveCursorTo(editor.getLine().length);
+        return false;
+      }
+      if (keymap.matches(event, "cmdLineHome")) {
+        event.preventDefault();
+        editor.moveCursorTo(0);
+        return false;
+      }
+      if (keymap.matches(event, "cmdLineEnd")) {
+        event.preventDefault();
+        editor.moveCursorTo(editor.getLine().length);
+        return false;
+      }
+      if (keymap.matches(event, "wordLeft")) {
         event.preventDefault();
         editor.moveCursorTo(editor.wordLeftPos(editor.getCursor()));
         return false;
       }
-      if (event.key === "ArrowRight") {
+      if (keymap.matches(event, "wordRight")) {
         event.preventDefault();
         editor.moveCursorTo(editor.wordRightPos(editor.getCursor()));
+        return false;
+      }
+      // Delete the word behind the cursor.
+      if (keymap.matches(event, "deleteWordLeft")) {
+        event.preventDefault();
+        editor.deleteRange(editor.wordLeftPos(editor.getCursor()), editor.getCursor());
+        return false;
+      }
+      // Delete from line start to the cursor.
+      if (keymap.matches(event, "deleteToLineStart")) {
+        event.preventDefault();
+        editor.deleteRange(0, editor.getCursor());
         return false;
       }
     }

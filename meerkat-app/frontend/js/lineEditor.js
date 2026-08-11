@@ -73,6 +73,12 @@ export function createLineEditor(term) {
     return i;
   }
 
+  // Deletes line[start:end] — just replaceRange with empty text, but
+  // named for what callers (Option+Delete/Cmd+Delete below) actually mean.
+  function deleteRange(start, end) {
+    replaceRange(start, end, "");
+  }
+
   // Replaces line[start:end] with `text` and redraws — the same
   // cursor-relative rewrite technique insertText/backspace use above: move
   // the terminal cursor back to `start`, erase to end of line, rewrite.
@@ -102,5 +108,6 @@ export function createLineEditor(term) {
     wordLeftPos,
     wordRightPos,
     replaceRange,
+    deleteRange,
   };
 }

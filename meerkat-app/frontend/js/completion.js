@@ -75,7 +75,7 @@ export function createCompletionMenu(term, editor) {
       const label = c.slice(state.dirLen);
       return i === state.index ? `\x1b[7m${label}\x1b[27m` : label;
     });
-    term.write("\x1b[s\r\n" + items.join("    ") + "\x1b[u");
+    term.write("\x1b[s\r\n" + items.join("  ") + "\x1b[u");
   }
 
   // Erases the candidate list and drops the menu state.
@@ -120,5 +120,5 @@ export function createCompletionMenu(term, editor) {
     return false;
   }
 
-  return { isActive, handleTab, handleKey };
+  return { isActive, handleTab, handleKey, close };
 }

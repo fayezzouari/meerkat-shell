@@ -31,6 +31,7 @@ export async function createSession({
   initialCwd,
   onNewTabRequested,
   onToggleOverlayRequested,
+  onSplitRequested,
   onSessionEnded,
 }) {
   const term = new Terminal(terminalOptions());
@@ -78,7 +79,12 @@ export async function createSession({
     daemon.sendResize(id, term.rows, term.cols);
   }
 
+  // Skipped while the pane has no size — a tab that's display:none, or a
+  // pane mid-relayout. FitAddon would otherwise propose a degenerate
+  // rows/cols from the zero-sized parent, and that bogus size would be
+  // sent to the daemon and applied to the pty.
   function fit() {
+    if (container.clientWidth === 0 || container.clientHeight === 0) return;
     fitAddon.fit();
     sendResize();
   }
@@ -325,6 +331,20 @@ export async function createSession({
     if (keymap.matches(event, "toggleJobsOverlay")) {
       event.preventDefault();
       onToggleOverlayRequested();
+      return false;
+    }
+    // Checked before splitRight: with the default bindings the two differ
+    // only by Shift, and keymap.matches compares modifiers exactly, so
+    // order doesn't actually matter — but it does the moment someone
+    // rebinds one of them to a prefix of the other.
+    if (keymap.matches(event, "splitDown")) {
+      event.preventDefault();
+      onSplitRequested("column");
+      return false;
+    }
+    if (keymap.matches(event, "splitRight")) {
+      event.preventDefault();
+      onSplitRequested("row");
       return false;
     }
     if (keymap.matches(event, "interrupt")) {

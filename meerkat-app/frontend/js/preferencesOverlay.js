@@ -1,5 +1,6 @@
 import * as keymap from "./keymap.js";
 import { THEMES, getThemeId, applyTheme } from "./themes.js";
+import * as appearance from "./appearance.js";
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);

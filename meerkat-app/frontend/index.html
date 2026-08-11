@@ -196,6 +196,42 @@
         padding: 6px 0 0 10px;
         box-sizing: border-box;
       }
+      /* Shown in place of a terminal when the daemon can't be reached. */
+      .pane-error {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 10px;
+        padding: 0 40px;
+        max-width: 620px;
+        margin: 0 auto;
+      }
+      .pane-error-title {
+        font-family: var(--font-display);
+        font-size: 22px;
+        color: var(--text);
+      }
+      .pane-error-detail {
+        font-family: "JetBrains Mono", Menlo, monospace;
+        font-size: 12px;
+        color: var(--danger);
+        word-break: break-word;
+      }
+      .pane-error-hint {
+        font-size: 12.5px;
+        line-height: 1.6;
+        color: var(--text-dim);
+      }
+      .pane-error code {
+        font-family: "JetBrains Mono", Menlo, monospace;
+        font-size: 11.5px;
+        background: var(--bg-hover);
+        border-radius: 4px;
+        padding: 1px 5px;
+      }
+
       /* Applied only when a tab actually has more than one pane — see
          updateFocusRing. inset rather than a real border so adding it
          doesn't change the pane's box and reflow the terminal. */

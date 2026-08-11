@@ -6,6 +6,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
 )
 
 //go:embed all:frontend
@@ -22,6 +23,14 @@ func main() {
 			Assets: assets,
 		},
 		Menu: buildMenu(app),
+		// Must be non-nil even though every field is left at its default:
+		// Wails only computes the window's `zoomable` flag inside its
+		// `if options.Mac != nil` branch (internal/frontend/desktop/darwin/
+		// window.go), so leaving Mac unset leaves zoomable=false, and
+		// WailsContext.m then explicitly does [button setEnabled:NO] on the
+		// green zoom button. An empty struct means DisableZoom stays false
+		// and the button is left enabled, which is what we want.
+		Mac: &mac.Options{},
 		// A programmatically-created NSWindow never gets
 		// NSWindowCollectionBehaviorFullScreenPrimary unless it's told to
 		// start fullscreen — there's no Wails option to just grant that

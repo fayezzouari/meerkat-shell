@@ -55,6 +55,12 @@ defmodule MeerkatDaemon.Connection do
 
   @impl true
   def init(socket) do
+    # Without trapping exits, a supervisor-initiated shutdown (the daemon
+    # itself stopping) kills this process outright and terminate/2 below
+    # never runs — leaking the foreground job exactly the way a closed
+    # client socket used to. Trapping turns that into a normal shutdown
+    # that runs terminate/2 first.
+    Process.flag(:trap_exit, true)
     {:ok, %{socket: socket, cwd: System.get_env("HOME", "/"), current: nil, winsz: {24, 80}}}
   end
 
@@ -108,6 +114,7 @@ defmodule MeerkatDaemon.Connection do
   def handle_info({:tcp_closed, _socket}, state), do: {:stop, :normal, state}
   def handle_info({:tcp_error, _socket, _reason}, state), do: {:stop, :normal, state}
 
+
   # Raw pty output from the current foreground job — forwarded immediately,
   # unbuffered. A pty merges stdin/stdout/stderr onto one fd, so :stderr
   # shouldn't normally fire for a pty'd process, but it's handled the same
@@ -135,6 +142,30 @@ defmodule MeerkatDaemon.Connection do
   # Stale/unexpected messages (e.g. from a job we're no longer tracking) —
   # ignore rather than crash the connection.
   def handle_info(_msg, state), do: {:noreply, state}
+
+  # The client for this connection is gone — its pane/tab was closed, or
+  # the app quit. A foreground job belongs to that pane specifically: it
+  # was attached to the pane's pty and there is no longer anything to read
+  # its output or feed it input, so it has to go too.
+  #
+  # Without this it survives as an orphan of the erlexec port process,
+  # still holding its memory, still `running` in `jobs` output (and so in
+  # the GUI's overlay) forever — nothing will ever deliver its :DOWN,
+  # because the Connection that would have handled it is this one.
+  #
+  # Background jobs are deliberately left alone: `cmd &` is detached by
+  # definition and outliving the pane that launched it is the point.
+  @impl true
+  def terminate(_reason, state) do
+    if state.current do
+      :exec.stop(state.current.pid)
+      # 143 = 128 + SIGTERM, the conventional shell exit code for it —
+      # :exec.stop/1 sends SIGTERM before escalating.
+      JobManager.finish_job(state.current.id, 143)
+    end
+
+    :ok
+  end
 
   defp dispatch("", state) do
     send_frame(state.socket, ?X, "0")

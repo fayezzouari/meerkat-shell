@@ -30,7 +30,28 @@ func main() {
 		// WailsContext.m then explicitly does [button setEnabled:NO] on the
 		// green zoom button. An empty struct means DisableZoom stays false
 		// and the button is left enabled, which is what we want.
-		Mac: &mac.Options{},
+		// WindowIsTranslucent is what makes the background-opacity setting
+		// (Preferences → Appearance) possible at all: it installs an
+		// NSVisualEffectView behind the webview, and WebviewIsTransparent
+		// lets the page's own transparency reach it. Wails never calls
+		// setOpaque:NO on the window itself, so this vibrancy path is the
+		// only supported way to see anything behind the window — meaning
+		// "transparent" here reads as macOS frosted glass, not clear glass.
+		//
+		// Both are window-creation flags and can't be toggled later, so
+		// they're always on; opacity is then purely a matter of what the
+		// page paints (see appearance.js). At 100% the surfaces are fully
+		// opaque and nothing shows through, which is the default.
+		//
+		// Mac must also stay non-nil for the green zoom button — see the
+		// zoomable note in Wails' window.go.
+		Mac: &mac.Options{
+			WindowIsTranslucent:  true,
+			WebviewIsTransparent: true,
+		},
+		// Fully transparent: every visible surface is painted by the page,
+		// so the window must not lay down an opaque colour underneath.
+		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 0},
 		// A programmatically-created NSWindow never gets
 		// NSWindowCollectionBehaviorFullScreenPrimary unless it's told to
 		// start fullscreen — there's no Wails option to just grant that

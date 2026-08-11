@@ -64,18 +64,61 @@ export async function createSession({
   // echoes them back, exactly like a real terminal.
   let jobRunning = false;
 
+  // True from the moment a job ends until its next prompt is actually on
+  // screen. Rendering the prompt is asynchronous (see prompt() below), and
+  // during that window the line editor must not accept keystrokes: local
+  // echo writes straight to the terminal, so a character typed in that gap
+  // would be drawn *before* the prompt it belongs after.
+  let awaitingPrompt = false;
+
+  // Serializes every write this module produces that isn't a direct
+  // response to a keystroke — pty output, builtin output, and prompts.
+  //
+  // Without this, prompt() would race: it awaits locationFor() (which is
+  // IPC to Go for HomeDir/GitInfo) between the job ending and the prompt
+  // text hitting the screen, and any pty bytes still queued behind that
+  // job would be written *during* the gap. That's what produced prompts
+  // interleaved into a running program's redraw — "~ ❯" landing in the
+  // middle of a full-screen TUI's output. Chaining every write means they
+  // land in arrival order no matter which of them had to await something.
+  let writeChain = Promise.resolve();
+  function enqueueWrite(fn) {
+    writeChain = writeChain.catch(() => {}).then(fn);
+    return writeChain;
+  }
+
   // Prompt shows "<repo> <branch>" (colored) inside a git working tree, or
   // the "~"-shortened cwd otherwise — see promptInfo.js. Then a plain white
   // arrow, then switches to bright white (left active, no trailing reset)
   // so everything typed next — the command itself — reads white against
   // the grey/colored output around it. \x1b[0m up front guards against a
   // program leaving the terminal mid-SGR-state on exit.
-  async function prompt() {
-    const location = await locationFor(cwd);
-    term.write(`\x1b[0m\r\n${location} \x1b[97m❯\x1b[0m \x1b[97m`);
+  //
+  // The location lookup happens *inside* the queued task, so nothing else
+  // can write while it's in flight. Returns a promise resolving once the
+  // prompt is on screen.
+  function prompt() {
+    awaitingPrompt = true;
+    return enqueueWrite(async () => {
+      const location = await locationFor(cwd);
+      term.write(`\x1b[0m\r\n${location} \x1b[97m❯\x1b[0m \x1b[97m`);
+      awaitingPrompt = false;
+    });
   }
 
+  // Only tell the daemon when the grid size actually changed. A pane
+  // resize fires continuously while a divider is dragged, but the cell
+  // grid only changes at font-cell boundaries — without this, a single
+  // drag sends hundreds of identical winsz updates, and every one is a
+  // SIGWINCH that makes a full-screen program (vim, htop, claude) throw
+  // away its frame and redraw. That storm of half-finished redraws is
+  // what leaves debris in the scrollback.
+  let lastRows = 0;
+  let lastCols = 0;
   function sendResize() {
+    if (term.rows === lastRows && term.cols === lastCols) return;
+    lastRows = term.rows;
+    lastCols = term.cols;
     daemon.sendResize(id, term.rows, term.cols);
   }
 
@@ -118,9 +161,9 @@ export async function createSession({
   const info = await daemon.openSession({
     onLine: (raw) => {
       if (raw.startsWith("O:")) {
-        term.write("\r\n" + raw.slice(2));
+        enqueueWrite(() => term.write("\r\n" + raw.slice(2)));
       } else if (raw.startsWith("E:")) {
-        term.write(`\r\n\x1b[31m${raw.slice(2)}\x1b[0m`);
+        enqueueWrite(() => term.write(`\r\n\x1b[31m${raw.slice(2)}\x1b[0m`));
       } else if (raw.startsWith("D:")) {
         cwd = raw.slice(2);
       } else if (raw.startsWith("X:")) {
@@ -128,7 +171,7 @@ export async function createSession({
         prompt();
       }
     },
-    onPty: (bytes) => term.write(bytes),
+    onPty: (bytes) => enqueueWrite(() => term.write(bytes)),
     // No message written here — the tab is about to close (or the whole
     // app is about to quit) either way, same as a real terminal closing a
     // tab the instant its shell process exits, so there's nothing useful
@@ -215,6 +258,13 @@ export async function createSession({
       return;
     }
 
+    // The job has ended but its prompt hasn't rendered yet — see
+    // awaitingPrompt. Dropping the keystroke loses a few milliseconds of
+    // typing at worst; accepting it would echo the character above the
+    // prompt line and leave the editor's buffer disagreeing with what's
+    // on screen for the rest of the line.
+    if (awaitingPrompt) return;
+
     // Menu nav (Tab/Shift+Tab/Left/Right) while a completion menu is open
     // is consumed here; anything else falls through to normal handling
     // below, whether or not a menu was open (see completion.js).
@@ -269,8 +319,11 @@ export async function createSession({
       daemon.sendInput(id, "\x03");
       return;
     }
+    if (awaitingPrompt) return;
     if (completion.isActive()) completion.close();
-    term.write("^C\x1b[0m\r\n");
+    // Queued rather than written directly, so "^C" can't jump ahead of
+    // output still draining from the job that just ended.
+    enqueueWrite(() => term.write("^C\x1b[0m\r\n"));
     editor.reset();
     prompt();
   }

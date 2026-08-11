@@ -44,6 +44,13 @@ func NewApp() *App {
 // just lost, since Wails events aren't buffered).
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+
+	// See main.go's WindowStartState comment: this is what actually grants
+	// the window native-fullscreen capability (NSWindowCollectionBehavior
+	// FullScreenPrimary) — dropping back to windowed immediately after is
+	// the trade for keeping that capability without the app staying
+	// fullscreen on launch.
+	runtime.WindowUnfullscreen(ctx)
 }
 
 // SessionInfo is what NewSession resolves to in JS: {id, cwd}.

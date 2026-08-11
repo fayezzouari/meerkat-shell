@@ -21,6 +21,7 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
+		Menu: buildMenu(app),
 		// A programmatically-created NSWindow never gets
 		// NSWindowCollectionBehaviorFullScreenPrimary unless it's told to
 		// start fullscreen — there's no Wails option to just grant that

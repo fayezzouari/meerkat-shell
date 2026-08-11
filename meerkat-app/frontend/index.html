@@ -538,6 +538,39 @@
         color: var(--text);
         background: var(--bg-hover);
       }
+      .prefs-btn:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .prefs-btn:disabled:hover {
+        color: var(--text-dim);
+        background: transparent;
+      }
+
+      /* Appearance controls. accent-color hands the native range/number
+         widgets the theme's accent without restyling them from scratch. */
+      .prefs-range {
+        flex: 0 0 130px;
+        accent-color: var(--accent);
+      }
+      .prefs-select,
+      .prefs-number {
+        flex: 0 0 auto;
+        font-family: inherit;
+        font-size: 12px;
+        color: var(--text);
+        background: var(--bg-hover);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 6px;
+        accent-color: var(--accent);
+      }
+      .prefs-number {
+        width: 56px;
+      }
+      .prefs-error {
+        color: var(--danger);
+      }
       .prefs-footer {
         border-top: 1px solid var(--border);
         margin: 10px 6px 0;

@@ -61,12 +61,99 @@ export function createPreferencesOverlay() {
     ).join("");
   }
 
+  // Opacity / font / background image. Everything here is applied live on
+  // input rather than behind an Apply button — they're all visual, so the
+  // window behind this panel *is* the preview.
+  function renderAppearance() {
+    const s = appearance.getSettings();
+    const imgError = appearance.getBackgroundImageError();
+    const imgName = s.backgroundImagePath ? s.backgroundImagePath.split("/").pop() : "";
+    const families = appearance.FONT_FAMILIES.map(
+      (f) => `<option value="${f.id}"${f.id === s.fontFamily ? " selected" : ""}>${escapeHtml(f.name)}</option>`,
+    ).join("");
+
+    return `
+      <div class="prefs-row">
+        <div class="prefs-row-text">
+          <div class="prefs-row-label">Background opacity</div>
+          <div class="prefs-row-desc">Lower values let your desktop — or the image below — show through.</div>
+        </div>
+        <input class="prefs-range" id="opacity-range" type="range"
+               min="${appearance.OPACITY_MIN * 100}" max="100" step="1" value="${Math.round(s.opacity * 100)}" />
+        <div class="prefs-row-combo" id="opacity-value">${Math.round(s.opacity * 100)}%</div>
+      </div>
+
+      <div class="prefs-row">
+        <div class="prefs-row-text">
+          <div class="prefs-row-label">Terminal font</div>
+          <div class="prefs-row-desc">Monospace only — xterm renders into a fixed cell grid.</div>
+        </div>
+        <select class="prefs-select" id="font-family">${families}</select>
+      </div>
+
+      <div class="prefs-row">
+        <div class="prefs-row-text">
+          <div class="prefs-row-label">Font size</div>
+        </div>
+        <input class="prefs-number" id="font-size" type="number"
+               min="${appearance.FONT_SIZE_MIN}" max="${appearance.FONT_SIZE_MAX}" step="1" value="${s.fontSize}" />
+      </div>
+
+      <div class="prefs-row">
+        <div class="prefs-row-text">
+          <div class="prefs-row-label">Background image</div>
+          <div class="prefs-row-desc" id="bg-image-state">${
+            imgError
+              ? `<span class="prefs-error">${escapeHtml(imgError)}</span>`
+              : imgName
+                ? escapeHtml(imgName)
+                : "None"
+          }</div>
+        </div>
+        <button class="prefs-btn" id="bg-image-choose">Choose…</button>
+        <button class="prefs-btn" id="bg-image-clear"${s.backgroundImagePath ? "" : " disabled"}>Clear</button>
+      </div>
+    `;
+  }
+
+  function wireAppearance() {
+    const range = root.querySelector("#opacity-range");
+    const value = root.querySelector("#opacity-value");
+    range.addEventListener("input", () => {
+      // Update the number directly instead of re-rendering: a full render
+      // would rebuild the slider mid-drag and drop the pointer capture.
+      value.textContent = `${range.value}%`;
+      appearance.update({ opacity: Number(range.value) / 100 });
+    });
+
+    root.querySelector("#font-family").addEventListener("change", (e) => {
+      appearance.update({ fontFamily: e.target.value });
+    });
+
+    const size = root.querySelector("#font-size");
+    size.addEventListener("change", () => {
+      const n = Math.max(appearance.FONT_SIZE_MIN, Math.min(appearance.FONT_SIZE_MAX, Number(size.value) || 13));
+      size.value = n;
+      appearance.update({ fontSize: n });
+    });
+
+    root.querySelector("#bg-image-choose").addEventListener("click", async () => {
+      if (await appearance.pickBackgroundImage()) render();
+    });
+    root.querySelector("#bg-image-clear").addEventListener("click", () => {
+      appearance.update({ backgroundImagePath: "" });
+      render();
+    });
+  }
+
   function render() {
     const rows = keymap.listActions().map(renderRow).join("");
     root.innerHTML = `
       <div class="overlay-panel prefs-panel">
         <div class="overlay-heading">Theme</div>
         <div class="theme-grid">${renderThemes()}</div>
+        <div class="overlay-heading">Appearance</div>
+        ${renderAppearance()}
         <div class="overlay-heading">Keyboard Shortcuts</div>
         ${rows}
         <div class="prefs-footer">
@@ -74,6 +161,8 @@ export function createPreferencesOverlay() {
         </div>
       </div>
     `;
+
+    wireAppearance();
 
     root.querySelectorAll(".theme-card").forEach((card) => {
       card.addEventListener("click", (event) => {

@@ -99,6 +99,14 @@
         background: var(--bg-raised);
         box-shadow: inset 0 -2px 0 var(--accent);
       }
+      .tab-badge {
+        font-size: 10px;
+        font-weight: 500;
+        color: var(--text-faint);
+        background: var(--bg-hover);
+        border-radius: 4px;
+        padding: 1px 5px;
+      }
       .tab-close {
         display: flex;
         align-items: center;
@@ -122,15 +130,78 @@
         min-height: 0;
         background: var(--bg-raised);
       }
+      /* One per tab; holds that tab's split tree. Only the active tab's
+         root is displayed (sessionManager toggles display flex/none). */
+      .tab-pane-root {
+        position: absolute;
+        inset: 0;
+        display: flex;
+      }
+
+      /* Split containers and their children. The min-width/min-height: 0
+         on both is load-bearing: flex items default to min-content sizing,
+         which would stop a terminal from ever shrinking below the width of
+         its longest output line and let panes overflow their split. */
+      .split {
+        display: flex;
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 0;
+      }
+      .split-row {
+        flex-direction: row;
+      }
+      .split-column {
+        flex-direction: column;
+      }
+      .split-child {
+        display: flex;
+        min-width: 0;
+        min-height: 0;
+      }
+
+      .divider {
+        flex: 0 0 5px;
+        background: var(--border);
+        transition: background 0.12s ease;
+      }
+      .divider:hover,
+      body.dragging-divider .divider {
+        background: var(--accent);
+      }
+      .divider-row {
+        cursor: col-resize;
+      }
+      .divider-column {
+        cursor: row-resize;
+      }
+      /* While dragging, the cursor must not flicker as it passes over the
+         terminals either side, and text must not get selected. */
+      body.dragging-divider {
+        user-select: none;
+      }
+      body.dragging-divider * {
+        cursor: inherit !important;
+      }
+
       /* Only a small left/top inset so glyphs don't touch the window edge.
          Deliberately minimal: any padding here is dead space the terminal
          grid can't use, and a larger inset reads as a frame around the
          terminal rather than as breathing room. */
       .pane {
-        position: absolute;
-        inset: 0;
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 0;
+        position: relative;
         padding: 6px 0 0 10px;
         box-sizing: border-box;
+      }
+      /* Applied only when a tab actually has more than one pane — see
+         updateFocusRing. inset rather than a real border so adding it
+         doesn't change the pane's box and reflow the terminal. */
+      .pane-focused {
+        box-shadow: inset 0 0 0 1px var(--accent);
+        border-radius: 4px;
       }
 
       /* Shared overlay chrome (Ctrl+M jobs/sessions, Preferences) — a

@@ -12,10 +12,11 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Instrument+Serif&family=JetBrains+Mono:wght@500;700&display=swap"
     />
     <style>
-      /* Warm near-black + cream palette. The greys are all warm-tinted
-         (brown-leaning) rather than neutral, and the accent is terracotta
-         — the same family the terminal grid uses (see theme.js), so the
-         xterm canvas and the DOM chrome around it read as one surface. */
+      /* These are the "Clay" preset's values, inlined so the first paint
+         is already themed. At runtime themes.js overwrites every one of
+         them on <html> from the user's chosen preset — so treat this
+         block as a default, not as the palette: no rule below should
+         hardcode a color that a preset would need to change. */
       :root {
         --bg: #1b1917;
         --bg-raised: #232120;
@@ -25,6 +26,9 @@
         --text-dim: #a09a90;
         --text-faint: #6b655d;
         --accent: #d97757;
+        --danger: #f08a72;
+        --warning: #d9a94d;
+        --backdrop: rgba(18, 16, 15, 0.62);
 
         --font-ui: "DM Sans", -apple-system, "Helvetica Neue", sans-serif;
         /* Reserved for panel titles — the reference pairs a display serif
@@ -36,7 +40,13 @@
       html,
       body {
         margin: 0;
-        height: 100%;
+        /* 100dvh, not 100% — during a macOS fullscreen transition the
+           window's height changes before the layout viewport catches up,
+           and a percentage height resolved against a stale containing
+           block leaves the flex column taller than the window, which
+           (with overflow:hidden below) silently clips the terminal's last
+           row instead of scrolling. */
+        height: 100dvh;
         /* The app itself never scrolls — only containers that opt in
            (the overlay panels' own overflow-y:auto) should. Without this,
            WebKit's backdrop-filter (on the overlay backdrops) can bleed
@@ -101,8 +111,8 @@
         color: var(--text-faint);
       }
       .tab-close:hover {
-        color: #f08a72;
-        background: rgba(224, 112, 92, 0.16);
+        color: var(--danger);
+        background: var(--bg-hover);
       }
 
       /* Panes */
@@ -112,10 +122,14 @@
         min-height: 0;
         background: var(--bg-raised);
       }
+      /* Only a small left/top inset so glyphs don't touch the window edge.
+         Deliberately minimal: any padding here is dead space the terminal
+         grid can't use, and a larger inset reads as a frame around the
+         terminal rather than as breathing room. */
       .pane {
         position: absolute;
         inset: 0;
-        padding: 16px 18px;
+        padding: 6px 0 0 10px;
         box-sizing: border-box;
       }
 
@@ -123,9 +137,13 @@
          softly blurred backdrop and a floating card, no hard borders. */
       #overlay,
       #prefs-overlay {
-        position: absolute;
+        /* fixed, not absolute: these are viewport-level modals, and
+           position:absolute made their size depend on the page box —
+           which is what let the blurred backdrop feed back into the
+           document's own scroll height. */
+        position: fixed;
         inset: 0;
-        background: rgba(18, 16, 15, 0.62);
+        background: var(--backdrop);
         backdrop-filter: blur(6px);
         display: flex;
         align-items: flex-start;
@@ -242,7 +260,7 @@
       }
       .prefs-row-recording .prefs-row-combo {
         font-family: var(--font-ui);
-        color: #d9a94d;
+        color: var(--warning);
         font-style: italic;
         font-weight: 400;
       }

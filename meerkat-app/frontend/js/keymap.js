@@ -11,7 +11,13 @@
 // Persisted to localStorage rather than round-tripping through Go: Wails'
 // webview keeps its own on-disk profile per app (same as any browser
 // profile), so this survives restarts with no daemon/Go involvement at all.
-const STORAGE_KEY = "meerkat.keybindings.v1";
+// Bumped to v2 when the sidebar toggle moved off Cmd+M. persist() writes
+// the *whole* binding map, so anyone who had ever touched a single
+// shortcut had the old Cmd+M default frozen into their stored copy — and a
+// stored binding wins over a default, so they'd have kept a shortcut that
+// macOS silently swallows for Minimize. Bumping the key is what lets the
+// new default actually reach existing installs.
+const STORAGE_KEY = "meerkat.keybindings.v2";
 
 // `default` is {key, ctrl, alt, meta, shift} — `key` matches
 // KeyboardEvent.key (single letters stored lower-case; special keys use
@@ -87,9 +93,13 @@ export const ACTIONS = [
     default: { key: "d", meta: true, shift: true },
   },
   {
-    id: "toggleJobsOverlay",
-    label: "Toggle Sessions/Jobs Overlay",
-    default: { key: "m", meta: true },
+    id: "toggleSidebar",
+    label: "Toggle Sidebar",
+    description: "Shows open panes and running jobs alongside the terminal.",
+    // Not Cmd+M: macOS binds that to Minimize via the native Window menu,
+    // and Cocoa resolves menu key equivalents before the webview sees the
+    // keystroke — so it never reached this app at all.
+    default: { key: "b", meta: true },
   },
   {
     id: "toggleFullscreen",

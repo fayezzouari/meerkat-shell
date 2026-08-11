@@ -2,11 +2,18 @@ import { createSessionManager } from "./js/sessionManager.js";
 import { createSidebar } from "./js/sidebar.js";
 import { createPreferencesOverlay } from "./js/preferencesOverlay.js";
 import { applyTheme, getThemeId } from "./js/themes.js";
+import { initAppearance } from "./js/appearance.js";
 
 // Before anything renders: index.html's :root only carries the default
 // preset's values, so this is what swaps in the user's saved pick (and is
 // a no-op re-apply if they're on the default).
 applyTheme(getThemeId());
+
+// Awaited before the first tab exists: appearance owns the terminal font
+// and opacity, and it reads the background image off disk through Go. A
+// Terminal built before this resolves would be constructed with the wrong
+// font, then have to be restyled and refitted a frame later.
+await initAppearance();
 
 const sessionManager = createSessionManager({
   tabBarEl: document.getElementById("tabbar"),

@@ -9,61 +9,89 @@
     />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=JetBrains+Mono:wght@600;800&display=swap"
     />
     <style>
+      :root {
+        --bg: #0b0b0c;
+        --bg-raised: #141416;
+        --bg-hover: rgba(255, 255, 255, 0.05);
+        --border: rgba(255, 255, 255, 0.07);
+        --text: #d9d9d9;
+        --text-dim: #7a7a7a;
+        --text-faint: #4a4a4a;
+        --accent: #6fd1c9;
+      }
+
       html,
       body {
         margin: 0;
         height: 100%;
-        background: #0b0b0c;
-        font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+        /* The app itself never scrolls — only containers that opt in
+           (the overlay panels' own overflow-y:auto) should. Without this,
+           WebKit's backdrop-filter (on the overlay backdrops) can bleed
+           its blur past the element's box and get counted as page
+           overflow, putting a scrollbar on the whole window behind the
+           modal instead of just inside it. */
+        overflow: hidden;
+        background: var(--bg);
+        font-family: "Open Sans", -apple-system, "Helvetica Neue", sans-serif;
       }
       body {
         display: flex;
         flex-direction: column;
       }
 
-      /* Tab bar */
+      /* Tab bar — flat, no dividers; the active tab reads by a slightly
+         lighter label and a thin accent underline, nothing else. */
       #tabbar {
         display: flex;
         flex: 0 0 auto;
-        background: #0b0b0c;
-        border-bottom: 1px solid #222;
+        align-items: flex-end;
+        gap: 2px;
+        padding: 10px 10px 0;
+        background: var(--bg);
         -webkit-app-region: drag;
         min-height: 44px;
+        box-sizing: border-box;
       }
       .tab {
         -webkit-app-region: no-drag;
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 10px 16px;
-        font-size: 14px;
-        color: #707070;
-        border-right: 1px solid #1c1c1c;
+        gap: 8px;
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-dim);
+        border-radius: 6px 6px 0 0;
         cursor: pointer;
         user-select: none;
+        transition: color 0.12s ease, background 0.12s ease;
+      }
+      .tab:hover {
+        color: var(--text);
+        background: var(--bg-hover);
       }
       .tab.active {
-        color: #d9d9d9;
-        background: #17171a;
-        border-bottom: 2px solid #4dc4c4;
+        color: var(--text);
+        background: var(--bg-raised);
+        box-shadow: inset 0 -2px 0 var(--accent);
       }
       .tab-close {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 20px;
-        height: 20px;
+        width: 18px;
+        height: 18px;
         border-radius: 4px;
-        font-size: 15px;
+        font-size: 14px;
         line-height: 1;
-        color: #666;
+        color: var(--text-faint);
       }
       .tab-close:hover {
-        color: #e05c5c;
-        background: #2a1c1c;
+        color: #e88;
+        background: rgba(224, 92, 92, 0.15);
       }
 
       /* Panes */
@@ -71,107 +99,108 @@
         position: relative;
         flex: 1 1 auto;
         min-height: 0;
+        background: var(--bg-raised);
       }
       .pane {
         position: absolute;
         inset: 0;
-        padding: 10px;
+        padding: 16px 18px;
         box-sizing: border-box;
       }
 
-      /* Ctrl+M overlay */
-      #overlay {
+      /* Shared overlay chrome (Ctrl+M jobs/sessions, Preferences) — a
+         softly blurred backdrop and a floating card, no hard borders. */
+      #overlay,
+      #prefs-overlay {
         position: absolute;
         inset: 0;
-        background: rgba(0, 0, 0, 0.55);
+        background: rgba(8, 8, 9, 0.6);
+        backdrop-filter: blur(6px);
         display: flex;
         align-items: flex-start;
         justify-content: center;
-        padding-top: 60px;
+        padding-top: 64px;
         z-index: 10;
       }
-      #overlay.hidden {
+      #overlay.hidden,
+      #prefs-overlay.hidden {
         display: none;
       }
       .overlay-panel {
-        background: #141416;
-        border: 1px solid #262626;
-        border-radius: 8px;
+        background: var(--bg-raised);
+        border-radius: 14px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
         width: 480px;
         max-width: 90%;
         max-height: 70vh;
         overflow-y: auto;
-        padding: 12px 0;
+        padding: 8px 0 14px;
       }
       .overlay-section + .overlay-section {
-        border-top: 1px solid #222;
-        margin-top: 8px;
-        padding-top: 8px;
+        border-top: 1px solid var(--border);
+        margin-top: 6px;
+        padding-top: 6px;
       }
       .overlay-heading {
-        color: #4dc4c4;
+        color: var(--text-dim);
         font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        padding: 4px 14px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        padding: 12px 18px 6px;
       }
       .overlay-row {
-        padding: 6px 14px;
+        padding: 7px 18px;
         font-size: 13px;
-        color: #a8a8a8;
+        color: var(--text-dim);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        border-radius: 8px;
+        margin: 0 6px;
       }
       .overlay-session {
         cursor: pointer;
       }
       .overlay-session:hover {
-        background: #1c1c1f;
-        color: #d9d9d9;
+        background: var(--bg-hover);
+        color: var(--text);
       }
       .overlay-empty {
-        padding: 6px 14px;
+        padding: 7px 18px;
         font-size: 13px;
-        color: #555;
+        color: var(--text-faint);
       }
       .job-id {
-        color: #d9b84d;
+        color: var(--text-faint);
+        font-weight: 600;
       }
       .job-status {
-        color: #4dc4c4;
+        color: var(--accent);
         margin: 0 8px;
       }
       .job-mem {
-        color: #d090f0;
+        color: var(--text-dim);
         margin-right: 8px;
       }
       .job-cmd {
-        color: #a8a8a8;
+        color: var(--text-dim);
       }
 
       /* Preferences overlay */
-      #prefs-overlay {
-        position: absolute;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.55);
-        display: flex;
-        align-items: flex-start;
-        justify-content: center;
-        padding-top: 40px;
-        z-index: 10;
-      }
-      #prefs-overlay.hidden {
-        display: none;
-      }
       .prefs-panel {
         width: 640px;
+        padding-top: 4px;
       }
       .prefs-row {
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 8px 14px;
+        padding: 9px 18px;
+        margin: 0 6px;
+        border-radius: 8px;
+      }
+      .prefs-row:hover {
+        background: var(--bg-hover);
       }
       .prefs-row-text {
         flex: 1 1 auto;
@@ -179,44 +208,49 @@
       }
       .prefs-row-label {
         font-size: 13px;
-        color: #d9d9d9;
+        font-weight: 600;
+        color: var(--text);
       }
       .prefs-row-desc {
-        font-size: 11px;
-        color: #666;
+        font-size: 11.5px;
+        color: var(--text-faint);
         margin-top: 2px;
       }
       .prefs-row-combo {
         flex: 0 0 auto;
         min-width: 90px;
         text-align: right;
-        font-size: 13px;
-        color: #4dc4c4;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--accent);
         white-space: nowrap;
       }
       .prefs-row-recording .prefs-row-combo {
-        color: #d9b84d;
+        color: #e0c065;
         font-style: italic;
+        font-weight: 400;
       }
       .prefs-btn {
         flex: 0 0 auto;
         font-family: inherit;
-        font-size: 11px;
-        color: #a8a8a8;
-        background: #1c1c1f;
-        border: 1px solid #2a2a2a;
-        border-radius: 4px;
-        padding: 4px 8px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--text-dim);
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        padding: 5px 10px;
         cursor: pointer;
+        transition: color 0.12s ease, background 0.12s ease;
       }
       .prefs-btn:hover {
-        color: #d9d9d9;
-        border-color: #3a3a3a;
+        color: var(--text);
+        background: var(--bg-hover);
       }
       .prefs-footer {
-        border-top: 1px solid #222;
-        margin-top: 8px;
-        padding: 10px 14px 2px;
+        border-top: 1px solid var(--border);
+        margin: 10px 6px 0;
+        padding: 12px 12px 0;
         display: flex;
         justify-content: flex-end;
       }

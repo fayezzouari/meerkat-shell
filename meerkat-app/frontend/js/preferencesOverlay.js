@@ -1,4 +1,5 @@
 import * as keymap from "./keymap.js";
+import { THEMES, getThemeId, applyTheme } from "./themes.js";
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -39,10 +40,32 @@ export function createPreferencesOverlay() {
     `;
   }
 
+  // Each preset renders as a swatch trio (background / accent / foreground)
+  // pulled straight from the theme's own values, so the list previews what
+  // it's offering rather than just naming it.
+  function renderThemes() {
+    const activeId = getThemeId();
+    return THEMES.map(
+      (t) => `
+        <div class="theme-card${t.id === activeId ? " theme-card-active" : ""}" data-theme-id="${t.id}"
+             style="background: ${t.chrome.bgRaised}; border-color: ${t.id === activeId ? t.chrome.accent : t.chrome.border};">
+          <div class="theme-swatches">
+            <span class="theme-dot" style="background: ${t.chrome.bg};"></span>
+            <span class="theme-dot" style="background: ${t.chrome.accent};"></span>
+            <span class="theme-dot" style="background: ${t.chrome.text};"></span>
+          </div>
+          <div class="theme-name" style="color: ${t.chrome.text};">${escapeHtml(t.name)}</div>
+          <div class="theme-desc" style="color: ${t.chrome.textDim};">${escapeHtml(t.description)}</div>
+        </div>`,
+    ).join("");
+  }
+
   function render() {
     const rows = keymap.listActions().map(renderRow).join("");
     root.innerHTML = `
       <div class="overlay-panel prefs-panel">
+        <div class="overlay-heading">Theme</div>
+        <div class="theme-grid">${renderThemes()}</div>
         <div class="overlay-heading">Keyboard Shortcuts</div>
         ${rows}
         <div class="prefs-footer">
@@ -50,6 +73,14 @@ export function createPreferencesOverlay() {
         </div>
       </div>
     `;
+
+    root.querySelectorAll(".theme-card").forEach((card) => {
+      card.addEventListener("click", (event) => {
+        event.stopPropagation();
+        applyTheme(card.dataset.themeId);
+        render(); // re-render so the active outline moves to the new pick
+      });
+    });
 
     root.querySelectorAll(".prefs-row").forEach((row) => {
       const id = row.dataset.id;

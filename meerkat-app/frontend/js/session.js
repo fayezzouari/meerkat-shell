@@ -5,6 +5,7 @@ import { createHistory } from "./history.js";
 import * as daemon from "./daemonClient.js";
 import { locationFor } from "./promptInfo.js";
 import * as keymap from "./keymap.js";
+import { onThemeChange } from "./themes.js";
 
 // Creates one tab: its own daemon connection, xterm.js Terminal, and all
 // the per-session state (line editor, completion menu, history, cwd,
@@ -32,12 +33,21 @@ export async function createSession({
   onToggleOverlayRequested,
   onSessionEnded,
 }) {
-  const term = new Terminal(terminalOptions);
+  const term = new Terminal(terminalOptions());
   const fitAddon = new FitAddon.FitAddon();
   term.loadAddon(fitAddon);
   term.open(container);
   fitAddon.fit();
   term.writeln("Meerkat — connecting...");
+
+  // Live-swap this tab's canvas palette when the user picks a different
+  // preset in Preferences. Colors only, so nothing reflows — no re-fit or
+  // resize needs to follow, and scrollback keeps its existing ANSI
+  // attributes (they're stored as palette indices, so already-printed
+  // output recolors to the new preset too).
+  const unsubscribeTheme = onThemeChange((theme) => {
+    term.options.theme = theme.terminal;
+  });
 
   const editor = createLineEditor(term);
   const completion = createCompletionMenu(term, editor);
@@ -85,6 +95,19 @@ export async function createSession({
   // @font-face referenced in the document has finished loading, so this
   // re-fits and re-sends the corrected size.
   document.fonts.ready.then(fit);
+
+  // The window-resize listener in sessionManager.js only catches actual
+  // window resizes. A macOS fullscreen toggle (green button / Cmd+Ctrl+F)
+  // changes the pane's height in steps the resize event doesn't always
+  // land on cleanly, and the tab bar growing/shrinking as tabs are added
+  // resizes the pane with no window resize at all — in both cases the pty
+  // keeps the old row count and the program drawing into it runs off the
+  // bottom of the visible area. Observing the container itself catches
+  // every one of those, whatever caused it.
+  const paneObserver = new ResizeObserver(() => {
+    if (id !== null) fit();
+  });
+  paneObserver.observe(container);
 
   const info = await daemon.openSession({
     onLine: (raw) => {
@@ -369,6 +392,8 @@ export async function createSession({
     fit,
     focus: () => term.focus(),
     dispose: () => {
+      paneObserver.disconnect();
+      unsubscribeTheme();
       daemon.closeSession(id);
       term.dispose();
     },

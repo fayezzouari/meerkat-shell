@@ -213,12 +213,62 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     const tab = { id: `tab-${nextTabId++}`, rootEl, root: null, activeLeafId: null };
     tabs.push(tab);
 
-    const leaf = await spawnLeaf({ initialCwd: inheritCwd });
+    let leaf;
+    try {
+      leaf = await spawnLeaf({ initialCwd: inheritCwd });
+    } catch (err) {
+      // Without this the promise just rejects into nothing and the window
+      // stays blank forever, with the real reason only visible in
+      // ~/.meerkat/daemon.log. The daemon failing to start is the common
+      // case (a stale socket, or `mix run` spawned outside the project
+      // directory), so say so and offer a retry rather than dying silently.
+      showTabError(tab, err);
+      switchToTab(tab.id);
+      return;
+    }
     tab.root = leaf;
     tab.activeLeafId = leaf.id;
 
     renderTab(tab);
     switchToTab(tab.id);
+  }
+
+  function showTabError(tab, err) {
+    tab.rootEl.innerHTML = "";
+    const box = document.createElement("div");
+    box.className = "pane-error";
+    box.innerHTML = `
+      <div class="pane-error-title">Can't reach the meerkat daemon</div>
+      <div class="pane-error-detail"></div>
+      <div class="pane-error-hint">
+        Start it with <code>./launch.sh</code>, or from
+        <code>meerkat-daemon/</code> run <code>mix run --no-halt</code>.
+        Details are logged to <code>~/.meerkat/daemon.log</code>.
+      </div>
+    `;
+    box.querySelector(".pane-error-detail").textContent = String(err?.message || err || "unknown error");
+
+    const retry = document.createElement("button");
+    retry.className = "prefs-btn";
+    retry.textContent = "Retry";
+    retry.addEventListener("click", async () => {
+      retry.disabled = true;
+      retry.textContent = "Connecting…";
+      try {
+        const leaf = await spawnLeaf({});
+        tab.root = leaf;
+        tab.activeLeafId = leaf.id;
+        renderTab(tab);
+        renderTabBar();
+        leaf.session.focus();
+      } catch (e) {
+        retry.disabled = false;
+        retry.textContent = "Retry";
+        box.querySelector(".pane-error-detail").textContent = String(e?.message || e);
+      }
+    });
+    box.appendChild(retry);
+    tab.rootEl.appendChild(box);
   }
 
   // Splits the focused pane, putting the new session to its right

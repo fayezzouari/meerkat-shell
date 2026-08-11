@@ -256,6 +256,22 @@ export async function createSession({
   term.attachCustomKeyEventHandler((event) => {
     if (event.type !== "keydown") return true;
 
+    // Cmd+Ctrl+F — the standard macOS fullscreen toggle. The window
+    // already supports native fullscreen via the green traffic-light
+    // button (nothing in main.go disables it); this is just the
+    // keyboard-only path every native Mac app also offers.
+    if (event.metaKey && event.ctrlKey && !event.altKey && event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      window.runtime.WindowIsFullscreen().then((isFullscreen) => {
+        if (isFullscreen) {
+          window.runtime.WindowUnfullscreen();
+        } else {
+          window.runtime.WindowFullscreen();
+        }
+      });
+      return false;
+    }
+
     if (event.metaKey && !event.ctrlKey && !event.altKey) {
       const key = event.key.toLowerCase();
       if (key === "t") {

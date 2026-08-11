@@ -75,6 +75,18 @@ export const ACTIONS = [
     default: { key: "t", meta: true },
   },
   {
+    id: "splitRight",
+    label: "Split Pane Right",
+    description: "Opens a second terminal beside this one, in the same directory.",
+    default: { key: "d", meta: true },
+  },
+  {
+    id: "splitDown",
+    label: "Split Pane Down",
+    description: "Opens a second terminal below this one, in the same directory.",
+    default: { key: "d", meta: true, shift: true },
+  },
+  {
     id: "toggleJobsOverlay",
     label: "Toggle Sessions/Jobs Overlay",
     default: { key: "m", meta: true },

@@ -175,6 +175,20 @@ func (a *App) SendInput(id string, data string) string {
 	return ""
 }
 
+// KillJob is called from JS when the user presses Ctrl+Z (or whatever it's
+// been remapped to — see keymap.js) while a foreground job is running in
+// session `id`.
+func (a *App) KillJob(id string) string {
+	client := a.client(id)
+	if client == nil {
+		return "not connected to daemon"
+	}
+	if err := client.Kill(); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
 // SendResize is called from JS whenever session `id`'s terminal size changes.
 func (a *App) SendResize(id string, rows int, cols int) string {
 	client := a.client(id)

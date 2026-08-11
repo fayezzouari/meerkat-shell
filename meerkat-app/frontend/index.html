@@ -9,18 +9,28 @@
     />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=JetBrains+Mono:wght@600;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Instrument+Serif&family=JetBrains+Mono:wght@500;700&display=swap"
     />
     <style>
+      /* Warm near-black + cream palette. The greys are all warm-tinted
+         (brown-leaning) rather than neutral, and the accent is terracotta
+         — the same family the terminal grid uses (see theme.js), so the
+         xterm canvas and the DOM chrome around it read as one surface. */
       :root {
-        --bg: #0b0b0c;
-        --bg-raised: #141416;
-        --bg-hover: rgba(255, 255, 255, 0.05);
-        --border: rgba(255, 255, 255, 0.07);
-        --text: #d9d9d9;
-        --text-dim: #7a7a7a;
-        --text-faint: #4a4a4a;
-        --accent: #6fd1c9;
+        --bg: #1b1917;
+        --bg-raised: #232120;
+        --bg-hover: rgba(245, 242, 234, 0.06);
+        --border: rgba(245, 242, 234, 0.09);
+        --text: #f5f2ea;
+        --text-dim: #a09a90;
+        --text-faint: #6b655d;
+        --accent: #d97757;
+
+        --font-ui: "DM Sans", -apple-system, "Helvetica Neue", sans-serif;
+        /* Reserved for panel titles — the reference pairs a display serif
+           against the geometric sans, and the overlay headings are the
+           only place in this app with a title to set that way. */
+        --font-display: "Instrument Serif", Georgia, serif;
       }
 
       html,
@@ -35,7 +45,8 @@
            modal instead of just inside it. */
         overflow: hidden;
         background: var(--bg);
-        font-family: "Open Sans", -apple-system, "Helvetica Neue", sans-serif;
+        font-family: var(--font-ui);
+        -webkit-font-smoothing: antialiased;
       }
       body {
         display: flex;
@@ -62,7 +73,7 @@
         gap: 8px;
         padding: 8px 12px;
         font-size: 13px;
-        font-weight: 600;
+        font-weight: 500;
         color: var(--text-dim);
         border-radius: 6px 6px 0 0;
         cursor: pointer;
@@ -90,8 +101,8 @@
         color: var(--text-faint);
       }
       .tab-close:hover {
-        color: #e88;
-        background: rgba(224, 92, 92, 0.15);
+        color: #f08a72;
+        background: rgba(224, 112, 92, 0.16);
       }
 
       /* Panes */
@@ -114,7 +125,7 @@
       #prefs-overlay {
         position: absolute;
         inset: 0;
-        background: rgba(8, 8, 9, 0.6);
+        background: rgba(18, 16, 15, 0.62);
         backdrop-filter: blur(6px);
         display: flex;
         align-items: flex-start;
@@ -142,11 +153,12 @@
         padding-top: 6px;
       }
       .overlay-heading {
-        color: var(--text-dim);
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        padding: 12px 18px 6px;
+        font-family: var(--font-display);
+        color: var(--text);
+        font-size: 18px;
+        font-weight: 400;
+        letter-spacing: 0.01em;
+        padding: 14px 18px 8px;
       }
       .overlay-row {
         padding: 7px 18px;
@@ -172,7 +184,7 @@
       }
       .job-id {
         color: var(--text-faint);
-        font-weight: 600;
+        font-weight: 500;
       }
       .job-status {
         color: var(--accent);
@@ -208,7 +220,7 @@
       }
       .prefs-row-label {
         font-size: 13px;
-        font-weight: 600;
+        font-weight: 500;
         color: var(--text);
       }
       .prefs-row-desc {
@@ -216,17 +228,21 @@
         color: var(--text-faint);
         margin-top: 2px;
       }
+      /* Key combos are the one place a mono face earns its keep in the
+         chrome — "⌥⌫" and "⌃⇧F" line up column-wise down the list. */
       .prefs-row-combo {
         flex: 0 0 auto;
         min-width: 90px;
         text-align: right;
-        font-size: 12.5px;
-        font-weight: 600;
+        font-family: "JetBrains Mono", Menlo, monospace;
+        font-size: 12px;
+        font-weight: 500;
         color: var(--accent);
         white-space: nowrap;
       }
       .prefs-row-recording .prefs-row-combo {
-        color: #e0c065;
+        font-family: var(--font-ui);
+        color: #d9a94d;
         font-style: italic;
         font-weight: 400;
       }
@@ -234,7 +250,7 @@
         flex: 0 0 auto;
         font-family: inherit;
         font-size: 11.5px;
-        font-weight: 600;
+        font-weight: 500;
         color: var(--text-dim);
         background: transparent;
         border: none;

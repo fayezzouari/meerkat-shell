@@ -35,7 +35,33 @@ defmodule MeerkatDaemon.JobManager do
     @table
     |> :ets.tab2list()
     |> Enum.sort_by(fn {id, _job} -> id end)
+    |> Enum.map(&reconcile/1)
   end
+
+  # A job whose erlexec process is gone is finished, whatever the table
+  # still says. Normally finish_job/2 records that when the owning
+  # Connection handles the job's :DOWN — but if that Connection died first
+  # (its pane was closed while the job was still running), nothing ever
+  # delivers the :DOWN and the entry reads `running` forever, even though
+  # the process is long dead. That's not a hypothetical: it's how the job
+  # table ends up advertising processes that no longer exist.
+  #
+  # Reconciling on read keeps `jobs` — and the GUI overlay built on it —
+  # honest, and writes the correction back so anything blocked in await/2
+  # isn't waiting on a job that can no longer finish.
+  defp reconcile({id, %{pid: pid, status: status} = job})
+       when is_pid(pid) and status in [:running, :stopped] do
+    if Process.alive?(pid) do
+      {id, job}
+    else
+      # 143 (128 + SIGTERM) is a stand-in: by definition we never observed
+      # this process's real exit status, only that it is gone.
+      finish_job(id, 143)
+      {id, %{job | status: :done, exit_code: 143}}
+    end
+  end
+
+  defp reconcile(entry), do: entry
 
   # Blocks the caller (a Connection process) until job `id` finishes.
   # Safe to call even if the job has already finished by the time this

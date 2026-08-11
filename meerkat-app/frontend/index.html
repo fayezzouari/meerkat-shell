@@ -149,6 +149,77 @@
       .job-cmd {
         color: #a8a8a8;
       }
+
+      /* Preferences overlay */
+      #prefs-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 40px;
+        z-index: 10;
+      }
+      #prefs-overlay.hidden {
+        display: none;
+      }
+      .prefs-panel {
+        width: 640px;
+      }
+      .prefs-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 14px;
+      }
+      .prefs-row-text {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .prefs-row-label {
+        font-size: 13px;
+        color: #d9d9d9;
+      }
+      .prefs-row-desc {
+        font-size: 11px;
+        color: #666;
+        margin-top: 2px;
+      }
+      .prefs-row-combo {
+        flex: 0 0 auto;
+        min-width: 90px;
+        text-align: right;
+        font-size: 13px;
+        color: #4dc4c4;
+        white-space: nowrap;
+      }
+      .prefs-row-recording .prefs-row-combo {
+        color: #d9b84d;
+        font-style: italic;
+      }
+      .prefs-btn {
+        flex: 0 0 auto;
+        font-family: inherit;
+        font-size: 11px;
+        color: #a8a8a8;
+        background: #1c1c1f;
+        border: 1px solid #2a2a2a;
+        border-radius: 4px;
+        padding: 4px 8px;
+        cursor: pointer;
+      }
+      .prefs-btn:hover {
+        color: #d9d9d9;
+        border-color: #3a3a3a;
+      }
+      .prefs-footer {
+        border-top: 1px solid #222;
+        margin-top: 8px;
+        padding: 10px 14px 2px;
+        display: flex;
+        justify-content: flex-end;
+      }
     </style>
   </head>
   <body>

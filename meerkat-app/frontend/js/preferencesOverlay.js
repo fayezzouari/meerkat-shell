@@ -69,7 +69,7 @@ export function createPreferencesOverlay() {
         <div class="overlay-heading">Keyboard Shortcuts</div>
         ${rows}
         <div class="prefs-footer">
-          <button class="prefs-btn prefs-btn-reset-all">Reset All to Defaults</button>
+          <button class="prefs-btn prefs-btn-reset-all">Reset Shortcuts to Defaults</button>
         </div>
       </div>
     `;

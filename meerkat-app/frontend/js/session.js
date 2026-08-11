@@ -5,7 +5,7 @@ import { createHistory } from "./history.js";
 import * as daemon from "./daemonClient.js";
 import { locationFor } from "./promptInfo.js";
 import * as keymap from "./keymap.js";
-import { onThemeChange } from "./themes.js";
+import { onAppearanceChange, terminalOptionsFor } from "./appearance.js";
 
 // Creates one tab: its own daemon connection, xterm.js Terminal, and all
 // the per-session state (line editor, completion menu, history, cwd,

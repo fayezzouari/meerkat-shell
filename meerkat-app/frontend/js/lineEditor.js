@@ -54,8 +54,15 @@ export function createLineEditor(term) {
     moveCursor(pos - cursor);
   }
 
+  // Characters that end a "word" for word-jump/word-delete purposes, same
+  // as space — path separators, quotes, and the openers of the bracket
+  // pairs meerkat's own parser cares about, so Option+Left/Right/Delete
+  // stops at "foo-bar/baz:qux" boundaries instead of treating the whole
+  // thing as one word.
+  const WORD_BOUNDARY_CHARS = new Set([" ", "-", "/", '"', "'", "{", "[", ":", "."]);
+
   function isWordChar(ch) {
-    return ch !== undefined && ch !== " ";
+    return ch !== undefined && !WORD_BOUNDARY_CHARS.has(ch);
   }
 
   function wordLeftPos(pos) {

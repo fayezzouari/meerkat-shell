@@ -105,6 +105,11 @@ func (c *pathCompleter) pathCandidates(prefix string) []string {
 		if !strings.HasPrefix(e.Name(), filePart) {
 			continue
 		}
+		// Hide dotfiles (.ssh, .profile, ...) unless the user already typed
+		// a leading dot themselves, same as zsh/bash's default behavior.
+		if strings.HasPrefix(e.Name(), ".") && !strings.HasPrefix(filePart, ".") {
+			continue
+		}
 		cand := dirPart + e.Name()
 		if e.IsDir() {
 			cand += "/"

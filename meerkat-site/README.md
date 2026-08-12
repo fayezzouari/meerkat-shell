@@ -40,10 +40,48 @@ Copy lives in `src/data/content.js` so editing what the page says never means
 editing layout. Backticked spans in those strings render as inline code via
 `components/Rich.jsx`.
 
+## The installer
+
+`public/install.sh` is served at `<host>/install.sh`, and downloads a release
+tarball from `<host>/downloads/latest/`. Build that tarball first:
+
+```
+../scripts/release.sh          # or --no-app to skip the GUI
+npm run dev
+curl -fsSL http://localhost:5273/install.sh | MEERKAT_BASE_URL=http://localhost:5273 sh
+```
+
+The `MEERKAT_BASE_URL` is needed because a piped script cannot see the URL it was
+fetched from; without it the installer goes to `meerkat.com`. The page prints
+whichever form matches the host serving it (see `src/data/install.js`), so on
+localhost the displayed command is the one that works.
+
+What lands where, with `~/.meerkat` as the default prefix:
+
+```
+~/.meerkat/versions/<version>/   the release: engine/, meerkat-cli, Meerkat.app
+~/.meerkat/current               symlink to the active version
+~/.meerkat/bin/meerkat           the shell
+~/.meerkat/bin/meerkat-app       the windowed terminal
+~/.meerkat/bin/meerkat-engine    start | stop | restart | status
+~/Applications/Meerkat.app       symlink, macOS only
+```
+
+Both wrappers start the engine before connecting, rather than relying on the
+client's own spawn — a first cold start reads the whole OTP release off disk and
+can outlast the client's wait. Checksums are verified against
+`downloads/latest/SHA256SUMS`; a mismatch aborts. `sh -s -- --uninstall` reverses
+it, leaving your socket and logs alone.
+
+Releases are built per platform (the engine ships a compiled OTP release and
+erlexec builds a C++ port program), so a Linux tarball has to be built on Linux.
+`public/downloads/` is gitignored — regenerate it, don't commit it.
+
 ## Before this goes live
 
-- `meerkat.com/install.sh` is a placeholder. The page says so in two places
-  (under the hero command and in the closing one) — remove both notes once a
-  real installer exists.
+- `meerkat.com` does not serve anything yet, so the command the page shows for
+  non-local hosts is still a placeholder and says so. Publishing means putting
+  `dist/` and a built `downloads/latest/` behind that domain; the installer
+  itself needs no change.
 - The type faces load from Google Fonts. Self-host them if the page needs to
   work offline.

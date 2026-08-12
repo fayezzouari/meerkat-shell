@@ -183,9 +183,12 @@ h1 em {
 .install-cmd code {
   padding: .95rem 1.15rem;
   font-size: clamp(.82rem, 1.5vw, .98rem);
-  white-space: nowrap;
-  overflow-x: auto;
+  /* Wraps rather than scrolls: a command you cannot read all of is a command
+     you cannot trust before pasting it into a shell. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   display: block;
+  min-width: 0;
 }
 .install-cmd code::before { content: "$ "; color: var(--accent); }
 .install-cmd button {

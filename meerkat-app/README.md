@@ -75,6 +75,31 @@ frontend (xterm.js)  <—events/methods—>  app.go  <—socket—>  meerkat-dae
   the daemon doesn't allocate a pty yet, so there's no kernel tty
   driver doing that for us.
 
+## Worktrees
+
+The sidebar (default `Cmd+B`) lists the git worktrees of whatever repo
+the focused pane is sitting in, alongside its panes and the daemon's
+job table. Each row shows the worktree's directory name, its branch, and
+a dot when it has uncommitted work; clicking one opens a new tab there.
+
+- **`+`** creates a worktree. Type a branch name: an existing local
+  branch is checked out, anything else is created as a new branch off
+  `HEAD`. The new worktree opens in a tab immediately.
+- **`×`** removes one (never the repo's main working tree). Removing a
+  worktree with uncommitted changes asks first, then passes `--force`.
+
+New worktrees land in `../<repo>-worktrees/<name>` by default — a
+sibling of the repo, so they never appear as untracked paths inside the
+working tree. Preferences → Worktrees changes that: `<repo>` expands to
+the repository's name and relative paths resolve against its root, so
+`.meerkat/worktrees` keeps them inside the repo instead.
+
+`worktree.go` shells out to the real `git` binary for all of this
+(`worktree list --porcelain`, `add`, `remove`) rather than
+reimplementing the plumbing, and every invocation runs with
+`GIT_TERMINAL_PROMPT=0` under a timeout — the sidebar polls on a 2s
+timer, and a git call that blocks on input would wedge it.
+
 ## Known limitation: no pty yet
 
 Programs that check "is this a real terminal" — `ls --color`,

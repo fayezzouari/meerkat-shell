@@ -1,9 +1,10 @@
 // Tab-completion menu. First Tab (with >1 match) selects and inserts the
-// first candidate, highlighted below the prompt; further Tab/Shift+Tab/
-// Left/Right cycle the selection and swap it into the line in place — see
-// cycle()/applySelected() — rather than reprinting the candidate list from
-// scratch each time. Any other key confirms whatever is currently selected
-// and closes the menu.
+// first candidate, highlighted below the prompt; further Tab/Shift+Tab and
+// any arrow key cycle the selection and swap it into the line in place —
+// see cycle()/applySelected() — rather than reprinting the candidate list
+// from scratch each time. Enter confirms whatever is currently selected
+// and closes the menu (without submitting the line); any other key also
+// closes the menu, then gets its usual handling.
 //
 // Candidates aren't necessarily prefixed by what was typed — Complete
 // (complete.go) also returns substring matches (so "fr" can find
@@ -106,14 +107,22 @@ export function createCompletionMenu(term, editor) {
       cycle(1);
       return true;
     }
-    if (data === "\x1b[Z" || data === "\x1b[D") {
-      // Shift+Tab, or Left — previous candidate.
+    if (data === "\x1b[Z" || data === "\x1b[D" || data === "\x1b[A") {
+      // Shift+Tab, or Left/Up — previous candidate.
       cycle(-1);
       return true;
     }
-    if (data === "\x1b[C") {
-      // Right — next candidate.
+    if (data === "\x1b[C" || data === "\x1b[B") {
+      // Right/Down — next candidate.
       cycle(1);
+      return true;
+    }
+    if (data === "\r") {
+      // Enter confirms the highlighted candidate: the menu closes with it
+      // already in the line (cycle() applies as it moves), and the key is
+      // consumed so it doesn't also submit the command. Arrows only ever
+      // move the selection, so confirming is always an explicit Enter.
+      close();
       return true;
     }
     close();

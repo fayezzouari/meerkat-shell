@@ -279,9 +279,10 @@ export async function createSession({
     // on screen for the rest of the line.
     if (awaitingPrompt) return;
 
-    // Menu nav (Tab/Shift+Tab/Left/Right) while a completion menu is open
-    // is consumed here; anything else falls through to normal handling
-    // below, whether or not a menu was open (see completion.js).
+    // Menu nav (Tab/Shift+Tab/arrows) and the confirming Enter while a
+    // completion menu is open are consumed here; anything else falls
+    // through to normal handling below, whether or not a menu was open
+    // (see completion.js).
     if (completion.handleKey(data)) return;
 
     if (data === "\r") {

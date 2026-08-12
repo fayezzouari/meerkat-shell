@@ -73,10 +73,10 @@ export function createSidebar(sessionManager) {
       .join("");
   }
 
-  // The worktree the focused pane is actually sitting in — the longest path
-  // that prefixes its cwd, since a worktree directory may nest inside the
-  // repo root's path string without being part of that checkout.
-  function currentWorktreePath(cwd) {
+  // The worktree a cwd is actually sitting in — the longest path that prefixes
+  // it, since a worktree directory may nest inside the repo root's path string
+  // without being part of that checkout.
+  function worktreeOf(cwd) {
     let best = "";
     for (const w of repo?.worktrees || []) {
       if ((cwd === w.path || cwd.startsWith(w.path + "/")) && w.path.length > best.length) {
@@ -86,7 +86,47 @@ export function createSidebar(sessionManager) {
     return best;
   }
 
-  function renderWorktreeRow(w, activePath) {
+  // Panes already sitting in a worktree, in tab order. Read live rather than
+  // from lastSessions: a click can land up to a poll interval after the last
+  // refresh, and reusing a pane that just closed would open nothing.
+  function panesIn(path) {
+    return sessionManager.list().filter((s) => worktreeOf(s.cwd) === path);
+  }
+
+  // Click focuses the worktree's terminal, double-click forces a new one.
+  // Detected by timestamp instead of a dblclick listener because the 2s poll
+  // can replace these rows between the two presses, and a swapped-out node
+  // never fires dblclick.
+  const DOUBLE_CLICK_MS = 400;
+  let lastOpen = { path: "", time: 0, spawned: false };
+
+  function handleOpenClick(path) {
+    const now = Date.now();
+    const previous = lastOpen;
+    lastOpen = { path: "", time: 0, spawned: false };
+
+    if (previous.path === path && now - previous.time < DOUBLE_CLICK_MS) {
+      // The first press of this double-click already spawned the only terminal
+      // this worktree had; a second would leave two fresh tabs behind.
+      if (!previous.spawned) sessionManager.openTabAt(path);
+      return;
+    }
+
+    const panes = panesIn(path);
+    if (panes.length === 0) {
+      sessionManager.openTabAt(path);
+      lastOpen = { path, time: now, spawned: true };
+      return;
+    }
+
+    // Repeated clicks tour the worktree's terminals rather than sticking on
+    // the first — with one pane (the common case) this just refocuses it.
+    const index = panes.findIndex((p) => p.id === sessionManager.activeId());
+    sessionManager.switchTo(panes[(index + 1) % panes.length].id);
+    lastOpen = { path, time: now, spawned: false };
+  }
+
+  function renderWorktreeRow(w, activePath, paneCount) {
     const active = w.path === activePath;
     const label = w.branch || (w.detached ? `${w.head} (detached)` : w.name);
     const flags = [];
@@ -94,6 +134,8 @@ export function createSidebar(sessionManager) {
     if (w.dirty) flags.push(`<span class="wt-tag wt-tag-dirty" title="uncommitted changes">●</span>`);
     if (w.locked) flags.push(`<span class="wt-tag">locked</span>`);
     if (w.missing || w.prunable) flags.push(`<span class="wt-tag wt-tag-stale">stale</span>`);
+    // Only worth showing past one: it's the cue that clicking cycles.
+    if (paneCount > 1) flags.push(`<span class="wt-tag" title="${paneCount} open terminals">${paneCount}</span>`);
 
     if (pendingRemove === w.path) {
       return `<div class="sidebar-row sidebar-worktree sidebar-worktree-confirm">
@@ -104,7 +146,8 @@ export function createSidebar(sessionManager) {
     }
 
     return `<div class="sidebar-row sidebar-worktree${active ? " sidebar-worktree-active" : ""}"
-                 data-act="open" data-path="${escapeHtml(w.path)}" title="${escapeHtml(w.path)}">
+                 data-act="open" data-path="${escapeHtml(w.path)}"
+                 title="${escapeHtml(w.path)}&#10;${paneCount ? "Click to focus its terminal" : "Click to open a terminal here"}&#10;Double-click for an additional terminal">
       <span class="sidebar-marker">${active ? "●" : "○"}</span>
       <span class="wt-name">${escapeHtml(w.name)}</span>
       ${label === w.name ? "" : `<span class="wt-branch">${escapeHtml(label)}</span>`}
@@ -123,8 +166,15 @@ export function createSidebar(sessionManager) {
       return `<div class="sidebar-empty">this pane isn't in a git repo</div>`;
     }
 
-    const activePath = currentWorktreePath(sessionManager.activeCwd());
-    const rows = (repo.worktrees || []).map((w) => renderWorktreeRow(w, activePath)).join("");
+    const activePath = worktreeOf(sessionManager.activeCwd());
+    const paneCounts = new Map();
+    for (const s of sessionManager.list()) {
+      const path = worktreeOf(s.cwd);
+      if (path) paneCounts.set(path, (paneCounts.get(path) || 0) + 1);
+    }
+    const rows = (repo.worktrees || [])
+      .map((w) => renderWorktreeRow(w, activePath, paneCounts.get(w.path) || 0))
+      .join("");
 
     const createRow = creating
       ? `<div class="sidebar-row sidebar-worktree-create">
@@ -180,7 +230,7 @@ export function createSidebar(sessionManager) {
         if (act !== "open") event.stopPropagation();
         switch (act) {
           case "open":
-            sessionManager.openTabAt(el.dataset.path);
+            handleOpenClick(el.dataset.path);
             break;
           case "new":
             worktreeError = "";

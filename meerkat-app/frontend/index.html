@@ -3,19 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <title>Meerkat</title>
-    <!-- Both vendored under ./vendor/ rather than pulled from a CDN: this
-         is a terminal, and a terminal that will not draw its own glyphs
-         without a network is broken. `//go:embed all:frontend` bakes them
-         into the binary, so there is nothing to install alongside it.
-         See scripts/vendor-fonts.sh to refresh either one. -->
+    <!-- Vendored, not CDN: a terminal that won't draw its glyphs offline is
+         broken. Refresh with scripts/vendor-fonts.sh. -->
     <link rel="stylesheet" href="./vendor/xterm/xterm.css" />
     <link rel="stylesheet" href="./vendor/fonts/fonts.css" />
     <style>
-      /* These are the "Clay" preset's values, inlined so the first paint
-         is already themed. At runtime themes.js overwrites every one of
-         them on <html> from the user's chosen preset — so treat this
-         block as a default, not as the palette: no rule below should
-         hardcode a color that a preset would need to change. */
+      /* The "Clay" preset, inlined so the first paint is themed; themes.js
+         overwrites all of it at runtime. No rule below may hardcode a color
+         a preset would need to change. */
       :root {
         --bg: #1b1917;
         --bg-raised: #232120;
@@ -30,19 +25,13 @@
         --backdrop: rgba(18, 16, 15, 0.62);
 
         --font-ui: "DM Sans", -apple-system, "Helvetica Neue", sans-serif;
-        /* Reserved for panel titles — the reference pairs a display serif
-           against the geometric sans, and the overlay headings are the
-           only place in this app with a title to set that way. */
         --font-display: "Instrument Serif", Georgia, serif;
 
-        /* Written by appearance.js from the theme + the user's opacity and
-           background-image settings. Defaults here are the fully-opaque,
-           no-image case, so first paint is correct before JS runs. */
+        /* Written by appearance.js; these defaults are the fully-opaque
+           case, so first paint is correct before JS runs. */
         --surface: #1b1917;
         --surface-raised: #232120;
         --font-mono: "JetBrains Mono", Menlo, monospace;
-        /* The shipped logo is the default wallpaper, so first paint already
-           shows it rather than flashing an empty window before JS runs. */
         --bg-image: url("/assets/meerkat-logo.png");
         --bg-image-size: 220px auto;
       }
@@ -50,26 +39,16 @@
       html,
       body {
         margin: 0;
-        /* 100dvh, not 100% — during a macOS fullscreen transition the
-           window's height changes before the layout viewport catches up,
-           and a percentage height resolved against a stale containing
-           block leaves the flex column taller than the window, which
-           (with overflow:hidden below) silently clips the terminal's last
-           row instead of scrolling. */
+        /* 100dvh, not 100%: during a macOS fullscreen transition a
+           percentage resolves against a stale containing block and clips
+           the terminal's last row. */
         height: 100dvh;
-        /* The app itself never scrolls — only containers that opt in
-           (the overlay panels' own overflow-y:auto) should. Without this,
-           WebKit's backdrop-filter (on the overlay backdrops) can bleed
-           its blur past the element's box and get counted as page
-           overflow, putting a scrollbar on the whole window behind the
-           modal instead of just inside it. */
+        /* Also stops WebKit's backdrop-filter blur from bleeding past the
+           overlay's box and scrolling the whole window behind the modal. */
         overflow: hidden;
-        /* Transparent, not --bg: the window is created translucent (see
-           main.go), so anything painted here would sit *under* every
-           surface as an extra opaque layer and defeat the opacity
-           setting. Each surface paints its own --surface/--surface-raised
-           instead, giving exactly one translucent layer over whatever is
-           behind the window. */
+        /* Transparent, not --bg: the window is created translucent, so
+           anything painted here would be an extra opaque layer under every
+           surface and defeat the opacity setting. */
         background: transparent;
         font-family: var(--font-ui);
         -webkit-font-smoothing: antialiased;
@@ -79,18 +58,10 @@
         flex-direction: column;
       }
 
-      /* The background image, behind everything. Fixed and z-index:-1 so it
-         never participates in layout — the app's own surfaces are
-         translucent and composite over it. The Meerkat mark is the default;
-         choosing "None" in Preferences sets --bg-image: none, in which case
-         this paints nothing at all and the translucent surfaces show the
-         desktop instead.
-
-         The low element opacity is deliberate and not user-adjustable: a
-         wallpaper at full strength sits directly behind terminal text (the
-         surfaces above it are translucent by design), and anything busier
-         than a faint wash makes output unreadable. Element opacity rather
-         than a pre-faded image so it applies to whatever the user picks. */
+      /* Behind everything and out of layout; the translucent surfaces
+         composite over it. The low opacity is deliberate and not
+         user-adjustable — this sits directly behind terminal text, and
+         anything busier than a faint wash makes output unreadable. */
       #backdrop {
         position: fixed;
         inset: 0;
@@ -103,8 +74,6 @@
         pointer-events: none;
       }
 
-      /* Tab bar — flat, no dividers; the active tab reads by a slightly
-         lighter label and a thin accent underline, nothing else. */
       #tabbar {
         display: flex;
         flex: 0 0 auto;
@@ -163,7 +132,6 @@
         background: var(--bg-hover);
       }
 
-      /* Sidebar + panes, side by side below the tab bar. */
       #workspace {
         display: flex;
         flex: 1 1 auto;
@@ -225,8 +193,7 @@
         font-size: 8px;
         color: var(--accent);
       }
-      /* Paths are long and the sidebar is narrow — clip from the *left* so
-         the meaningful tail (the directory you're actually in) survives,
+      /* Clips from the left, so the meaningful tail of a long path survives
          rather than the "/Users/..." prefix every row shares. */
       .sidebar-label {
         min-width: 0;
@@ -250,33 +217,27 @@
         white-space: nowrap;
       }
 
-      /* Panes */
       #panes {
         position: relative;
         flex: 1 1 auto;
         min-width: 0;
         min-height: 0;
-        /* The single layer carrying the terminal area's tint, at the
-           opacity chosen in Preferences (--surface-raised is
-           rgba(theme background, opacity) — see appearance.js). The xterm
-           canvases above are fully transparent, so this is not stacked
-           with a second tint, and because it spans the whole pane it also
-           covers the few pixels along the right/bottom edge that xterm's
-           whole-cell canvas sizing always leaves uncovered. */
+        /* The single layer carrying the terminal area's tint (see
+           appearance.js). The xterm canvases above are fully transparent, and
+           this spans the pane, covering the few pixels xterm's whole-cell
+           canvas sizing leaves along the right/bottom edge. */
         background: var(--surface-raised);
       }
-      /* One per tab; holds that tab's split tree. Only the active tab's
-         root is displayed (sessionManager toggles display flex/none). */
+      /* One per tab; sessionManager toggles display flex/none. */
       .tab-pane-root {
         position: absolute;
         inset: 0;
         display: flex;
       }
 
-      /* Split containers and their children. The min-width/min-height: 0
-         on both is load-bearing: flex items default to min-content sizing,
-         which would stop a terminal from ever shrinking below the width of
-         its longest output line and let panes overflow their split. */
+      /* min-width/min-height: 0 is load-bearing: flex items default to
+         min-content sizing, which would stop a terminal shrinking below its
+         longest output line and overflow the split. */
       .split {
         display: flex;
         flex: 1 1 0;
@@ -310,8 +271,7 @@
       .divider-column {
         cursor: row-resize;
       }
-      /* While dragging, the cursor must not flicker as it passes over the
-         terminals either side, and text must not get selected. */
+      /* Stops cursor flicker and text selection mid-drag. */
       body.dragging-divider {
         user-select: none;
       }
@@ -319,10 +279,8 @@
         cursor: inherit !important;
       }
 
-      /* Only a small left/top inset so glyphs don't touch the window edge.
-         Deliberately minimal: any padding here is dead space the terminal
-         grid can't use, and a larger inset reads as a frame around the
-         terminal rather than as breathing room. */
+      /* Minimal inset: padding here is dead space the terminal grid can't
+         use, and more of it reads as a frame. */
       .pane {
         flex: 1 1 0;
         min-width: 0;
@@ -367,23 +325,17 @@
         padding: 1px 5px;
       }
 
-      /* Applied only when a tab actually has more than one pane — see
-         updateFocusRing. inset rather than a real border so adding it
-         doesn't change the pane's box and reflow the terminal. */
+      /* inset rather than a real border, so adding it doesn't change the
+         pane's box and reflow the terminal. */
       .pane-focused {
         box-shadow: inset 0 0 0 1px var(--accent);
         border-radius: 4px;
       }
 
-      /* Preferences modal — the one thing still presented as a floating
-         card over a blurred backdrop (it's a settings dialog, not a
-         working surface). The sessions/jobs view that used to share this
-         chrome is now #sidebar above. */
       #prefs-overlay {
-        /* fixed, not absolute: this is a viewport-level modal, and
-           position:absolute made its size depend on the page box — which
-           is what let the blurred backdrop feed back into the document's
-           own scroll height. */
+        /* fixed, not absolute: absolute made the modal's size depend on the
+           page box, letting the blurred backdrop feed back into the
+           document's own scroll height. */
         position: fixed;
         inset: 0;
         background: var(--backdrop);
@@ -431,9 +383,8 @@
         color: var(--text-dim);
       }
 
-      /* Theme picker. Each card paints itself in its own preset's colors
-         (set inline from themes.js), so this grid is a live preview —
-         which is why it deliberately uses no --token colors of its own. */
+      /* Each card paints itself in its own preset's colors, set inline from
+         themes.js — so this grid uses no --token colors of its own. */
       .theme-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -452,7 +403,7 @@
       }
       .theme-card-active {
         border-width: 2px;
-        padding: 9px 11px; /* offset the thicker border so cards stay aligned */
+        padding: 9px 11px; /* offsets the thicker border */
       }
       .theme-swatches {
         display: flex;
@@ -474,7 +425,6 @@
         margin-top: 2px;
       }
 
-      /* Preferences overlay */
       .prefs-panel {
         width: 640px;
         padding-top: 4px;
@@ -504,8 +454,6 @@
         color: var(--text-faint);
         margin-top: 2px;
       }
-      /* Key combos are the one place a mono face earns its keep in the
-         chrome — "⌥⌫" and "⌃⇧F" line up column-wise down the list. */
       .prefs-row-combo {
         flex: 0 0 auto;
         min-width: 90px;
@@ -548,8 +496,6 @@
         background: transparent;
       }
 
-      /* Appearance controls. accent-color hands the native range/number
-         widgets the theme's accent without restyling them from scratch. */
       .prefs-range {
         flex: 0 0 130px;
         accent-color: var(--accent);
@@ -582,20 +528,16 @@
     </style>
   </head>
   <body>
-    <!-- Background image, painted faintly behind every surface. The Meerkat
-         mark by default; changed or removed in Preferences → Appearance. -->
     <div id="backdrop"></div>
     <div id="tabbar"></div>
-    <!-- Sidebar and panes are siblings in a flex row, not stacked layers:
-         opening the sidebar takes width away from the terminals rather
-         than covering them. -->
+    <!-- Siblings in a flex row, not stacked layers: opening the sidebar
+         takes width from the terminals rather than covering them. -->
     <div id="workspace">
       <aside id="sidebar" class="hidden"></aside>
       <div id="panes"></div>
     </div>
-    <!-- Classic scripts, not modules: both set globals (window.Terminal,
-         window.FitAddon) that main.js and session.js read, so they must
-         finish executing before the module below runs. -->
+    <!-- Classic scripts, not modules: both set globals the module below
+         reads, so they must finish executing first. -->
     <script src="./vendor/xterm/xterm.js"></script>
     <script src="./vendor/xterm/addon-fit.js"></script>
     <script type="module" src="./main.js"></script>

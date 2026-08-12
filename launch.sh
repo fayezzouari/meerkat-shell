@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Launch the Meerkat desktop app (meerkat-app), building it first if needed.
-#
-# meerkat-app spawns meerkat-daemon automatically on startup if nothing is
-# listening on $MEERKAT_SOCK (see meerkat-app/daemonclient), so this script
-# does not start the daemon itself.
+# Launch the Meerkat desktop app, building it first.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,19 +17,12 @@ if ! command -v wails >/dev/null 2>&1; then
   exit 1
 fi
 
-# meerkat-app's daemonclient spawns the daemon with `sh -c "mix run
-# --no-halt"` in $MEERKAT_DIR (defaults to "."), which is the wrong
-# directory when the app is launched via `open` (e.g. cwd = $HOME).
-# Start the daemon here, from the correct directory, so the app just
-# connects to the already-listening socket instead of trying to spawn it.
-# Whether something is actually accepting connections on the socket.
+# The app would otherwise spawn the daemon itself, in $MEERKAT_DIR — the wrong
+# directory when launched via `open`. Starting it here means the app just
+# connects to an already-listening socket.
 #
-# Testing for the *file* (-S) is not enough: a unix socket's inode outlives
-# the process that bound it, so a daemon that was killed (or crashed)
-# leaves the path behind looking exactly like a healthy one. This script
-# would then report "already running", start nothing, and the app would sit
-# at a blank window failing to connect — with the only clue buried in the
-# daemon log. Connecting for real is the only way to tell the two apart.
+# Testing for the file (-S) isn't enough: a unix socket's inode outlives the
+# process that bound it, so a dead daemon looks exactly like a healthy one.
 daemon_is_listening() {
   [[ -S "$SOCK_PATH" ]] || return 1
   python3 - "$SOCK_PATH" <<'PY' 2>/dev/null
@@ -50,8 +39,7 @@ PY
 }
 
 if ! daemon_is_listening; then
-  # Clear a stale socket first — the daemon cannot bind over an existing
-  # path, so leaving it would make the restart fail for a second reason.
+  # The daemon cannot bind over an existing path.
   if [[ -S "$SOCK_PATH" ]]; then
     echo "Found a stale socket at $SOCK_PATH (nothing listening) — removing it."
     rm -f "$SOCK_PATH"
@@ -77,9 +65,8 @@ fi
 
 cd "$APP_DIR"
 
-# Always rebuild: Wails embeds the frontend (and Go bindings) into the
-# binary at build time, so a stale build/bin/ silently ignores any
-# uncommitted/local changes to frontend/ or the Go sources.
+# Always rebuild: Wails embeds the frontend at build time, so a stale
+# build/bin/ silently ignores local changes.
 echo "Building meerkat-app..."
 wails build
 

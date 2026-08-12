@@ -12,37 +12,25 @@ defmodule MeerkatDaemon.Connection do
                     pty stdin (only meaningful while a job is running;
                     ignored otherwise)
       "R" <> <<rows::16, cols::16>>   terminal resize
-      "K"           terminate the current foreground job outright (same as
-                    the `kill <id>` builtin, just addressed at "whatever's
-                    running now" instead of a job id — this is what the
-                    client's Ctrl+Z sends, since without a wired-up
-                    fg/bg this app has no use for a real suspend; ignored
-                    if no job is running)
+      "K"           terminate the current foreground job outright; ignored
+                    if no job is running
 
     daemon -> client:
       "O" <> text   stdout line (builtins only — jobs/errors, not pty output)
       "E" <> text   stderr line (builtins only)
       "D" <> cwd    sent on connect, and again whenever `cd` changes it
-      "P" <> bytes  raw pty output, forwarded the instant it arrives —
-                    no line buffering, since curses programs and
-                    progress bars redraw with "\\r" and cursor escapes
-                    that may never contain a "\\n"
+      "P" <> bytes  raw pty output, unbuffered — curses programs redraw with
+                    "\\r" and escapes that may never contain a "\\n"
       "X" <> code   command complete, exit code as text
 
-  No separate "raw mode" phase needed on the wire: every message is
-  self-describing by its type byte, so client and daemon never have to
-  agree out-of-band on whether we're mid-pty-passthrough. The client
-  infers its own local editing-vs-passthrough mode from whether an "X"
-  is still outstanding for the line it last sent.
+  Every message is self-describing by its type byte, so there's no out-of-band
+  "raw mode" phase; the client infers its own editing-vs-passthrough mode from
+  whether an "X" is still outstanding.
 
-  Foreground jobs run attached to a pty (see `Evaluator.start_foreground/3`)
-  and, critically, run non-blocking: erlexec's `:stdout`/`:stderr`/`:DOWN`
-  messages land in *this* process's own mailbox (since this process is
-  the one that indirectly called `:exec.run/2`), interleaved with
-  incoming `:tcp` messages — that's what lets a keystroke (including
-  Ctrl+C) reach a running program instead of this process being stuck in
-  a blocking receive loop for the command's whole lifetime, which is how
-  it worked before pty support.
+  Foreground jobs run attached to a pty and non-blocking: erlexec's
+  `:stdout`/`:stderr`/`:DOWN` messages land in this process's mailbox
+  interleaved with `:tcp` messages, which is what lets a keystroke reach a
+  running program instead of blocking here for the command's lifetime.
   """
   use GenServer
   alias MeerkatDaemon.{Parser, Evaluator, JobManager}
@@ -55,17 +43,14 @@ defmodule MeerkatDaemon.Connection do
 
   @impl true
   def init(socket) do
-    # Without trapping exits, a supervisor-initiated shutdown (the daemon
-    # itself stopping) kills this process outright and terminate/2 below
-    # never runs — leaking the foreground job exactly the way a closed
-    # client socket used to. Trapping turns that into a normal shutdown
-    # that runs terminate/2 first.
+    # Without this, a supervisor-initiated shutdown kills this process
+    # outright, terminate/2 never runs, and the foreground job leaks.
     Process.flag(:trap_exit, true)
     {:ok, %{socket: socket, cwd: System.get_env("HOME", "/"), current: nil, winsz: {24, 80}}}
   end
 
-  # Sent by the acceptor once :gen_tcp.controlling_process/2 has completed —
-  # only then is it safe for this process to touch socket options.
+  # Sent by the acceptor once :gen_tcp.controlling_process/2 completed — only
+  # then is it safe to touch socket options here.
   @impl true
   def handle_info(:socket_ready, state) do
     :inet.setopts(state.socket, active: :once)
@@ -97,10 +82,7 @@ defmodule MeerkatDaemon.Connection do
         {:noreply, %{state | winsz: {rows, cols}}}
 
       <<?K>> ->
-        # Same :exec.stop/1 the `kill <id>` builtin uses — graceful SIGTERM,
-        # escalating to SIGKILL if the process doesn't go quietly. The
-        # actual "job's done" signal (the "X" frame) comes the normal way,
-        # through the :DOWN message once the process actually exits.
+        # The "X" frame still comes the normal way, via :DOWN.
         if state.current, do: :exec.stop(state.current.pid)
         :inet.setopts(socket, active: :once)
         {:noreply, state}
@@ -115,10 +97,8 @@ defmodule MeerkatDaemon.Connection do
   def handle_info({:tcp_error, _socket, _reason}, state), do: {:stop, :normal, state}
 
 
-  # Raw pty output from the current foreground job — forwarded immediately,
-  # unbuffered. A pty merges stdin/stdout/stderr onto one fd, so :stderr
-  # shouldn't normally fire for a pty'd process, but it's handled the same
-  # way defensively.
+  # A pty merges stdout/stderr onto one fd, so :stderr shouldn't normally fire
+  # here, but it's handled the same way defensively.
   def handle_info({:stdout, os_pid, data}, %{current: %{os_pid: os_pid}} = state) do
     send_frame(state.socket, ?P, data)
     {:noreply, state}
@@ -139,28 +119,18 @@ defmodule MeerkatDaemon.Connection do
     {:noreply, %{state | current: nil}}
   end
 
-  # Stale/unexpected messages (e.g. from a job we're no longer tracking) —
-  # ignore rather than crash the connection.
+  # Stale messages from a job we no longer track — ignore rather than crash.
   def handle_info(_msg, state), do: {:noreply, state}
 
-  # The client for this connection is gone — its pane/tab was closed, or
-  # the app quit. A foreground job belongs to that pane specifically: it
-  # was attached to the pane's pty and there is no longer anything to read
-  # its output or feed it input, so it has to go too.
-  #
-  # Without this it survives as an orphan of the erlexec port process,
-  # still holding its memory, still `running` in `jobs` output (and so in
-  # the GUI's overlay) forever — nothing will ever deliver its :DOWN,
-  # because the Connection that would have handled it is this one.
-  #
-  # Background jobs are deliberately left alone: `cmd &` is detached by
-  # definition and outliving the pane that launched it is the point.
+  # The client is gone, so its foreground job — attached to that pane's pty —
+  # has to go too. Left running, it orphans onto the erlexec port process and
+  # reads `running` forever, since this Connection is what would have handled
+  # its :DOWN. Background jobs are deliberately left alone.
   @impl true
   def terminate(_reason, state) do
     if state.current do
       :exec.stop(state.current.pid)
-      # 143 = 128 + SIGTERM, the conventional shell exit code for it —
-      # :exec.stop/1 sends SIGTERM before escalating.
+      # 143 = 128 + SIGTERM, which :exec.stop/1 sends before escalating.
       JobManager.finish_job(state.current.id, 143)
     end
 

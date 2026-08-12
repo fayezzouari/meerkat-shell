@@ -1,14 +1,11 @@
 defmodule MeerkatDaemon.SocketServer do
   @moduledoc """
-  Listens on a Unix domain socket and hands each accepted connection to
-  a supervised `MeerkatDaemon.Connection`. This is the piece a client dials
-  into — lazy-start clients should treat "connection refused / no such
-  file" on this path as "spawn the daemon, then retry".
+  Listens on a Unix domain socket and hands each accepted connection to a
+  supervised `MeerkatDaemon.Connection`. Lazy-start clients should treat
+  "connection refused / no such file" as "spawn the daemon, then retry".
 
-  `packet: 4` (4-byte length-prefixed framing) rather than `packet: :line`:
-  pty output can't safely be split on "\\n" (see `Connection`'s
-  moduledoc), so every message is now a discrete length-prefixed frame
-  with a leading type byte instead of a text line.
+  `packet: 4` rather than `packet: :line`, because pty output can't safely be
+  split on "\\n" (see `Connection`).
   """
   use GenServer
   require Logger

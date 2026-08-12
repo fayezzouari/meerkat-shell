@@ -1,28 +1,21 @@
 #!/usr/bin/env bash
 #
-# Re-downloads everything under frontend/vendor/ — xterm.js and the
-# webfonts. The app loads all of it from disk so it renders with no
-# network; this script is the only thing that should ever write there.
-#
-# Run it when bumping XTERM_VERSION/FIT_VERSION below, or when the font
-# list in frontend/js/appearance.js gains a family. The FONT_QUERY here
-# and FONT_FAMILIES there have to agree: a family listed in the picker
-# but missing from this query silently renders as Menlo.
-#
-#   ./scripts/vendor-fonts.sh
+# Re-downloads everything under frontend/vendor/ — the only thing that should
+# ever write there. Run it when bumping the versions below, or when
+# appearance.js's FONT_FAMILIES gains a family: a family in the picker but
+# missing from FONT_QUERY silently renders as Menlo.
 #
 set -euo pipefail
 
 XTERM_VERSION="5.5.0"
 FIT_VERSION="0.10.0"
 
-# Keep in step with FONT_FAMILIES in frontend/js/appearance.js. The two
-# non-mono faces (DM Sans, Instrument Serif) are the UI and heading fonts
-# from index.html, not terminal options.
+# The two non-mono faces are index.html's UI and heading fonts, not terminal
+# options.
 FONT_QUERY="family=DM+Sans:wght@400;500;700&family=Instrument+Serif&family=JetBrains+Mono:wght@500;700&family=Fira+Code:wght@400;600&family=IBM+Plex+Mono:wght@400;600&family=Source+Code+Pro:wght@400;600&display=swap"
 
-# Google serves a different CSS per browser; a modern desktop UA is what
-# gets woff2 rather than the much larger ttf fallback.
+# Google serves different CSS per browser; a modern desktop UA gets woff2
+# rather than the much larger ttf fallback.
 UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
 cd "$(dirname "$0")/.."
@@ -43,15 +36,12 @@ rm -rf "$VENDOR/fonts"
 mkdir -p "$VENDOR/fonts"
 curl -sSfL -A "$UA" -o /tmp/meerkat-gf.css "https://fonts.googleapis.com/css2?${FONT_QUERY}"
 
-# Rewrites each @font-face to point at a local file and drops the subsets
-# this app has no use for. Inline so the script stays the single source of
-# truth — there is no build step here to hang a real tool off.
+# Rewrites each @font-face to point at a local file, dropping unused subsets.
 FONTS_DIR="$VENDOR/fonts" python3 - <<'PY'
 import os, pathlib, re, urllib.request
 
 OUT = pathlib.Path(os.environ["FONTS_DIR"])
-# Latin only. The full set (cyrillic, greek, vietnamese) more than doubles
-# the payload for glyphs no prompt or menu in this app draws.
+# Latin only; the full set more than doubles the payload.
 KEEP = {"latin", "latin-ext"}
 
 css = open("/tmp/meerkat-gf.css").read()

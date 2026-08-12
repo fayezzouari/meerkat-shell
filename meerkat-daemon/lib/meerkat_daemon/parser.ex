@@ -1,12 +1,9 @@
 defmodule MeerkatDaemon.Parser do
   @moduledoc """
   Tokenizes a line (respecting single/double quotes) and splits it into
-  pipeline stages on `|`, plus a trailing `&` for background jobs. Still
-  intentionally close to POSIX shell syntax — the plan is a distinct
-  structured-pipe token (e.g. `|>`) later that routes into decoded
-  Elixir terms instead of another OS process. Keeping raw `|` behavior
-  means every pipeline stage still execs as one OS process group, which
-  is what job control (`fg`/`bg`/`kill`/`stop`) attaches to.
+  pipeline stages on `|`, plus a trailing `&` for background jobs. Every
+  pipeline stage execs as one OS process group, which is what job control
+  (`fg`/`bg`/`kill`/`stop`) attaches to.
   """
 
   @type stage :: {String.t(), [String.t()]}
@@ -64,9 +61,8 @@ defmodule MeerkatDaemon.Parser do
 
   defp finish(word), do: {:word, word |> Enum.reverse() |> List.to_string()}
 
-  # Only a trailing `&` is treated as the background marker — anywhere
-  # else it's ambiguous with our current grammar, so it's a parse error
-  # rather than silently doing something surprising.
+  # Only a trailing `&` is the background marker; anywhere else is a parse
+  # error rather than something surprising.
   defp take_background_marker(tokens) do
     case List.last(tokens) do
       :background ->

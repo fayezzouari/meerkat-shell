@@ -1,15 +1,9 @@
 defmodule MeerkatDaemon.JobManager do
   @moduledoc """
-  Owns the job table. Every pipeline invocation registers a job —
-  foreground jobs finish almost immediately, background jobs
-  (`cmd &`) can run for a while, and `fg`/`bg`/`kill`/`stop` all read
-  and act on this table.
+  Owns the job table that `fg`/`bg`/`kill`/`stop` read and act on.
 
-  `output` accumulates tagged chunks (`{:stdout, text}` /
-  `{:stderr, text}`) so `fg` on an already-finished background job can
-  replay what it produced. `waiters` lets `fg` block the calling
-  connection process until the job actually completes, without any
-  extra GenServer plumbing — the waiter is just the caller's own pid,
+  `output` accumulates tagged chunks so `fg` on an already-finished background
+  job can replay what it produced. A `waiters` entry is just the caller's pid,
   woken with a plain `send/2` from `finish_job/2`.
   """
   use GenServer
@@ -38,24 +32,17 @@ defmodule MeerkatDaemon.JobManager do
     |> Enum.map(&reconcile/1)
   end
 
-  # A job whose erlexec process is gone is finished, whatever the table
-  # still says. Normally finish_job/2 records that when the owning
-  # Connection handles the job's :DOWN — but if that Connection died first
-  # (its pane was closed while the job was still running), nothing ever
-  # delivers the :DOWN and the entry reads `running` forever, even though
-  # the process is long dead. That's not a hypothetical: it's how the job
-  # table ends up advertising processes that no longer exist.
-  #
-  # Reconciling on read keeps `jobs` — and the GUI overlay built on it —
-  # honest, and writes the correction back so anything blocked in await/2
-  # isn't waiting on a job that can no longer finish.
+  # A job whose erlexec process is gone is finished, whatever the table says:
+  # if the owning Connection died first, nothing ever delivers the :DOWN that
+  # finish_job/2 normally runs off, and the entry reads `running` forever.
+  # Correcting on read also unblocks anything waiting in await/2.
   defp reconcile({id, %{pid: pid, status: status} = job})
        when is_pid(pid) and status in [:running, :stopped] do
     if Process.alive?(pid) do
       {id, job}
     else
-      # 143 (128 + SIGTERM) is a stand-in: by definition we never observed
-      # this process's real exit status, only that it is gone.
+      # 143 (128 + SIGTERM) is a stand-in — the real exit status was never
+      # observed, only that the process is gone.
       finish_job(id, 143)
       {id, %{job | status: :done, exit_code: 143}}
     end
@@ -63,9 +50,7 @@ defmodule MeerkatDaemon.JobManager do
 
   defp reconcile(entry), do: entry
 
-  # Blocks the caller (a Connection process) until job `id` finishes.
-  # Safe to call even if the job has already finished by the time this
-  # runs — in that case there's simply no wait.
+  # Blocks the caller until job `id` finishes; a no-op if it already has.
   def await(id, timeout \\ :infinity) do
     case get_job(id) do
       %{status: :done, exit_code: code} ->

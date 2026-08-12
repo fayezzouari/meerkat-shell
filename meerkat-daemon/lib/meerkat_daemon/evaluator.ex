@@ -1,41 +1,22 @@
 defmodule MeerkatDaemon.Evaluator do
   @moduledoc """
-  Executes a parsed pipeline via erlexec instead of a plain `Port` —
-  the swap that was flagged since Phase 1 as "the one module designed
-  to be replaced wholesale." This is what unlocks real job control:
-  erlexec hands back an OS pid we can deliver actual signals to
-  (SIGSTOP/SIGCONT/SIGTERM), which a bare `Port` fundamentally cannot
-  do — a `Port` can only be closed, which has no equivalent of
-  suspend/resume.
+  Executes a parsed pipeline via erlexec rather than a plain `Port`, which
+  is what makes job control possible: erlexec hands back an OS pid real
+  signals can be delivered to, where a `Port` can only be closed.
 
   Builtins: `cd`, `exit`/`quit`, `jobs`, `fg`, `bg`, `kill`, `stop`.
-  Everything else is joined into a shell command string and run
-  through `sh -c`, one OS process group per pipeline — the same unit
-  `fg`/`bg`/`kill`/`stop` all operate on.
+  Everything else runs through `sh -c`, one OS process group per pipeline —
+  the unit `fg`/`bg`/`kill`/`stop` operate on.
 
-  Foreground pipelines run attached to a pty (real terminal semantics:
-  `isatty()` succeeds, curses programs like `vim`/`htop` work, output
-  isn't forced through line-buffering). `start_foreground/3` kicks the
-  job off and returns immediately — it does NOT block waiting for
-  output like it used to, because the caller (`Connection`) needs to
-  keep handling incoming client messages (keystrokes, resizes) while
-  the job runs, not sit blocked in a receive loop. `Connection` owns
-  the erlexec message loop for foreground jobs directly; `decode_exit/1`
-  is exposed publicly for it to reuse.
+  Foreground pipelines run attached to a pty and return immediately, since
+  `Connection` must keep handling client messages while the job runs; it owns
+  the erlexec message loop directly and reuses `decode_exit/1`. Background
+  jobs get no pty and run through the blocking `stream/5` loop inside a Task,
+  capturing output into `JobManager`.
 
-  Background jobs (`cmd &`) are unaffected by any of this: no pty (there's
-  no interactive terminal to attach a detached job to), and still run
-  through the original blocking `stream/5` loop inside a `Task`, capturing
-  output into `JobManager` for later `fg`/`jobs`.
-
-  Design note on `fg`: it blocks the calling connection until the job
-  finishes, then replays that job's *captured* output — it does not
-  re-route the job's *live* stdout/stderr to the connection that ran
-  `fg` (those messages keep going to whichever process actually called
-  `:exec.run/2`, i.e. the background Task). Real live reattachment
-  would mean redirecting erlexec's message target mid-flight, which is
-  a reasonable next step but out of scope here — same limitation as
-  before pty support, unrelated to it.
+  `fg` blocks until the job finishes and then replays its *captured* output;
+  it does not re-route the job's live stdout/stderr, which would mean
+  redirecting erlexec's message target mid-flight.
   """
 
   alias MeerkatDaemon.JobManager
@@ -81,9 +62,8 @@ defmodule MeerkatDaemon.Evaluator do
       jobs ->
         Enum.each(jobs, fn {id, job} ->
           suffix = if job.exit_code, do: " (exit #{job.exit_code})", else: ""
-          # Trailing os_pid lets a caller (meerkat-app's ListJobs, for the
-          # Ctrl+M overlay's memory stats) look up the OS process directly
-          # instead of needing a new protocol message just for this.
+          # The trailing os_pid lets meerkat-app's ListJobs measure the OS
+          # process without a protocol message of its own.
           emit.(:stdout, "[#{id}] #{job.status}#{suffix}\t#{job.cmd}\t#{job.os_pid}")
         end)
     end
@@ -192,26 +172,15 @@ defmodule MeerkatDaemon.Evaluator do
 
   ## Pipeline execution -------------------------------------------------
 
-  # Starts the job attached to a pty and returns immediately without
-  # streaming anything — the caller (Connection) is the one that called
-  # :exec.run indirectly via us, so erlexec's :stdout/:stderr/:DOWN
-  # messages land in *its* mailbox, interleaved with client :tcp
-  # messages. That's what lets a running program keep receiving
-  # keystrokes (including Ctrl+C) instead of the connection being stuck
-  # in a blocking receive loop for the job's whole lifetime.
+  # Returns immediately without streaming: erlexec's messages land in the
+  # caller's (Connection's) mailbox, interleaved with client :tcp messages,
+  # which is what lets keystrokes reach the running program.
   #
-  # pty_echo is on because the client no longer does its own local
-  # character echo while a job is running (see meerkat-app's
-  # frontend/main.js) — the pty layer now does that job, like a real
-  # terminal.
+  # pty_echo is on because the client stops echoing locally while a job runs.
   #
-  # PAGER/GIT_PAGER/MANPAGER are forced to `cat`: a real pty means
-  # isatty() succeeds, which makes git/man et al. reach for `less` by
-  # default — and `less` then blocks waiting for keystrokes (space/q)
-  # that, from the client side, look exactly like the command just hung
-  # with no output. Full-screen programs run *directly* (vim, htop,
-  # `less` invoked explicitly) are unaffected — this only stops tools
-  # from *automatically* shelling out to a pager behind your back.
+  # PAGER/GIT_PAGER/MANPAGER are forced to `cat`: with a real pty, isatty()
+  # succeeds and git/man reach for `less`, which then blocks on keystrokes and
+  # looks exactly like a hung command. Directly-invoked pagers still work.
   defp exec_pipeline(stages, cwd, :foreground, _emit, {rows, cols}) do
     cmd_string = render(stages)
     id = JobManager.new_job(cmd_string)
@@ -249,11 +218,8 @@ defmodule MeerkatDaemon.Evaluator do
     {:ok, cwd, 0}
   end
 
-  # Owns the erlexec message loop for one job: streams stdout/stderr
-  # line-by-line to `emit` as it arrives, and on :DOWN decodes the exit
-  # status and records it. Used for both foreground (emit -> socket)
-  # and background (emit -> JobManager.append_output) jobs — same loop,
-  # different destination for the output.
+  # Owns the erlexec message loop for one background job: streams lines to
+  # `emit` as they arrive, then records the exit status on :DOWN.
   defp stream(id, pid, os_pid, out_buf, err_buf, emit) do
     receive do
       {:stdout, ^os_pid, data} ->
@@ -280,9 +246,7 @@ defmodule MeerkatDaemon.Evaluator do
   def decode_exit({:exit_status, raw}) do
     case :exec.status(raw) do
       {:status, code} -> code
-      # Bash convention: signal-terminated processes report 128+signum.
-      # Only common signals are mapped; anything else falls back to 1
-      # rather than guessing.
+      # Bash convention: 128+signum. Unmapped signals fall back to 1.
       {:signal, sig, _core_dumped} -> 128 + signal_number(sig)
     end
   end

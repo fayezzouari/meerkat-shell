@@ -67,7 +67,8 @@ export function createPreferencesOverlay() {
   function renderAppearance() {
     const s = appearance.getSettings();
     const imgError = appearance.getBackgroundImageError();
-    const imgName = s.backgroundImagePath ? s.backgroundImagePath.split("/").pop() : "";
+    const isDefaultImg = s.backgroundImagePath === appearance.DEFAULT_BACKGROUND;
+    const imgName = !s.backgroundImagePath || isDefaultImg ? "" : s.backgroundImagePath.split("/").pop();
     const families = appearance.FONT_FAMILIES.map(
       (f) => `<option value="${f.id}"${f.id === s.fontFamily ? " selected" : ""}>${escapeHtml(f.name)}</option>`,
     ).join("");
@@ -107,11 +108,14 @@ export function createPreferencesOverlay() {
               ? `<span class="prefs-error">${escapeHtml(imgError)}</span>`
               : imgName
                 ? escapeHtml(imgName)
-                : "None"
+                : isDefaultImg
+                  ? "Meerkat mark (default) — always painted faintly"
+                  : "None"
           }</div>
         </div>
         <button class="prefs-btn" id="bg-image-choose">Choose…</button>
-        <button class="prefs-btn" id="bg-image-clear"${s.backgroundImagePath ? "" : " disabled"}>Clear</button>
+        <button class="prefs-btn" id="bg-image-default"${isDefaultImg ? " disabled" : ""}>Default</button>
+        <button class="prefs-btn" id="bg-image-clear"${s.backgroundImagePath ? "" : " disabled"}>None</button>
       </div>
     `;
   }
@@ -139,6 +143,10 @@ export function createPreferencesOverlay() {
 
     root.querySelector("#bg-image-choose").addEventListener("click", async () => {
       if (await appearance.pickBackgroundImage()) render();
+    });
+    root.querySelector("#bg-image-default").addEventListener("click", () => {
+      appearance.update({ backgroundImagePath: appearance.DEFAULT_BACKGROUND });
+      render();
     });
     root.querySelector("#bg-image-clear").addEventListener("click", () => {
       appearance.update({ backgroundImagePath: "" });

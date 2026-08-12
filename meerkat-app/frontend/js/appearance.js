@@ -83,6 +83,7 @@ const baseTerminalOptions = {
   fontWeightBold: 700,
   cursorStyle: "bar",
   cursorBlink: true,
+  lineHeight: 1.2
 };
 
 // Must be the *complete* option set: it both constructs a Terminal and, via

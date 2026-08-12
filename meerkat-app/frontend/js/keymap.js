@@ -82,7 +82,7 @@ export const ACTIONS = [
   {
     id: "toggleSidebar",
     label: "Toggle Sidebar",
-    description: "Shows open panes and running jobs alongside the terminal.",
+    description: "Shows open panes, git worktrees, and running jobs alongside the terminal.",
     // Not Cmd+M: Cocoa resolves that to Minimize before the webview ever
     // sees the keystroke.
     default: { key: "b", meta: true },

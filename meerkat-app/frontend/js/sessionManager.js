@@ -173,8 +173,10 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     return leaf;
   }
 
-  async function newTab() {
-    const inheritCwd = activeSession()?.getCwd();
+  // `cwd` opens the tab somewhere specific (the sidebar's worktree rows);
+  // without it the new tab inherits the focused pane's directory.
+  async function newTab({ cwd } = {}) {
+    const inheritCwd = cwd || activeSession()?.getCwd();
     const rootEl = document.createElement("div");
     rootEl.className = "tab-pane-root";
     panesEl.appendChild(rootEl);
@@ -351,9 +353,11 @@ export function createSessionManager({ tabBarEl, panesEl }) {
 
   return {
     newTab,
+    openTabAt: (cwd) => newTab({ cwd }),
     switchTo,
     closeTab,
     list,
+    activeCwd: () => activeSession()?.getCwd() || "",
     activeId: () => activeTab()?.activeLeafId ?? null,
     setSidebarToggle,
     setOnLayoutChange,

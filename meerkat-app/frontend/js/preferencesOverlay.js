@@ -1,6 +1,7 @@
 import * as keymap from "./keymap.js";
 import { THEMES, getThemeId, applyTheme } from "./themes.js";
 import * as appearance from "./appearance.js";
+import * as worktrees from "./worktrees.js";
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -146,6 +147,40 @@ export function createPreferencesOverlay() {
     });
   }
 
+  // One template for every repo: "<repo>" stands in for the repo's own name,
+  // and a relative path resolves against the repo root — so the default puts
+  // worktrees in a sibling directory, and "./.meerkat/worktrees" puts them
+  // inside it. Resolution lives in worktree.go.
+  function renderWorktrees() {
+    return `
+      <div class="prefs-row">
+        <div class="prefs-row-text">
+          <div class="prefs-row-label">Worktree directory</div>
+          <div class="prefs-row-desc">
+            Where the sidebar creates new worktrees. <code>&lt;repo&gt;</code> expands to the
+            repository's name; relative paths resolve against its root.
+          </div>
+        </div>
+        <input class="prefs-text" id="worktree-dir" type="text" spellcheck="false"
+               value="${escapeHtml(worktrees.getDir())}" />
+        <button class="prefs-btn" id="worktree-dir-reset">Reset</button>
+      </div>
+    `;
+  }
+
+  function wireWorktrees() {
+    const input = root.querySelector("#worktree-dir");
+    input.addEventListener("change", () => {
+      worktrees.setDir(input.value);
+      input.value = worktrees.getDir();
+    });
+    root.querySelector("#worktree-dir-reset").addEventListener("click", (event) => {
+      event.stopPropagation();
+      worktrees.resetDir();
+      render();
+    });
+  }
+
   function render() {
     const rows = keymap.listActions().map(renderRow).join("");
     root.innerHTML = `
@@ -154,6 +189,8 @@ export function createPreferencesOverlay() {
         <div class="theme-grid">${renderThemes()}</div>
         <div class="overlay-heading">Appearance</div>
         ${renderAppearance()}
+        <div class="overlay-heading">Worktrees</div>
+        ${renderWorktrees()}
         <div class="overlay-heading">Keyboard Shortcuts</div>
         ${rows}
         <div class="prefs-footer">
@@ -163,6 +200,7 @@ export function createPreferencesOverlay() {
     `;
 
     wireAppearance();
+    wireWorktrees();
 
     root.querySelectorAll(".theme-card").forEach((card) => {
       card.addEventListener("click", (event) => {

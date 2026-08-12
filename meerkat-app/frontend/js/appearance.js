@@ -16,8 +16,10 @@ const STORAGE_KEY = "meerkat.appearance.v1";
 // Monospace only, and that is not a stylistic preference — xterm.js lays
 // every glyph into a fixed-width cell, so a proportional face renders with
 // huge gaps after narrow letters instead of as proportional text. The
-// webfont entries must also be present in index.html's Google Fonts link
-// or they silently fall back to the next family in the stack.
+// webfont entries must also be vendored into frontend/vendor/fonts by
+// scripts/vendor-fonts.sh — adding one here without adding it to that
+// script's FONT_QUERY silently falls back to the next family in the
+// stack. The last two are system faces and need no such entry.
 export const FONT_FAMILIES = [
   { id: "jetbrains", name: "JetBrains Mono", stack: "'JetBrains Mono', Menlo, monospace" },
   { id: "fira", name: "Fira Code", stack: "'Fira Code', Menlo, monospace" },

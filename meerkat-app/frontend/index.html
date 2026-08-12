@@ -41,7 +41,10 @@
         --surface: #1b1917;
         --surface-raised: #232120;
         --font-mono: "JetBrains Mono", Menlo, monospace;
-        --bg-image: none;
+        /* The shipped logo is the default wallpaper, so first paint already
+           shows it rather than flashing an empty window before JS runs. */
+        --bg-image: url("/assets/meerkat-logo.png");
+        --bg-image-size: 220px auto;
       }
 
       html,
@@ -76,18 +79,27 @@
         flex-direction: column;
       }
 
-      /* The optional background image, behind everything. Fixed and
-         z-index:-1 so it never participates in layout — the app's own
-         surfaces are translucent and composite over it. Empty by default
-         (--bg-image: none), in which case this paints nothing at all and
-         the translucent surfaces show the desktop instead. */
+      /* The background image, behind everything. Fixed and z-index:-1 so it
+         never participates in layout — the app's own surfaces are
+         translucent and composite over it. The Meerkat mark is the default;
+         choosing "None" in Preferences sets --bg-image: none, in which case
+         this paints nothing at all and the translucent surfaces show the
+         desktop instead.
+
+         The low element opacity is deliberate and not user-adjustable: a
+         wallpaper at full strength sits directly behind terminal text (the
+         surfaces above it are translucent by design), and anything busier
+         than a faint wash makes output unreadable. Element opacity rather
+         than a pre-faded image so it applies to whatever the user picks. */
       #backdrop {
         position: fixed;
         inset: 0;
         z-index: -1;
         background-image: var(--bg-image);
-        background-size: cover;
+        background-size: var(--bg-image-size);
+        background-repeat: no-repeat;
         background-position: center;
+        opacity: 0.14;
         pointer-events: none;
       }
 
@@ -103,20 +115,6 @@
         -webkit-app-region: drag;
         min-height: 44px;
         box-sizing: border-box;
-      }
-      /* Brand mark, pinned to the tab bar's left edge. Deliberately has
-         no no-drag override: it's decoration, so it stays part of the
-         title bar's drag region rather than becoming a dead spot. */
-      #brand {
-        flex: 0 0 auto;
-        height: 22px;
-        width: auto;
-        /* The bar is align-items:flex-end, so this bottom margin is what
-           lifts the mark off the baseline to sit optically level with
-           the tab labels rather than with the tabs' lower edge. */
-        margin: 0 10px 6px 2px;
-        -webkit-user-drag: none;
-        user-select: none;
       }
       .tab {
         -webkit-app-region: no-drag;
@@ -584,14 +582,10 @@
     </style>
   </head>
   <body>
-    <!-- Optional background image, painted behind every surface. Empty
-         unless one is chosen in Preferences → Appearance. -->
+    <!-- Background image, painted faintly behind every surface. The Meerkat
+         mark by default; changed or removed in Preferences → Appearance. -->
     <div id="backdrop"></div>
-    <!-- The mark is static markup rather than something renderTabBar
-         emits, so it survives the tab list being re-rendered. -->
-    <div id="tabbar">
-      <img id="brand" src="/assets/meerkat-logo.png" alt="Meerkat" draggable="false" />
-    </div>
+    <div id="tabbar"></div>
     <!-- Sidebar and panes are siblings in a flex row, not stacked layers:
          opening the sidebar takes width away from the terminals rather
          than covering them. -->

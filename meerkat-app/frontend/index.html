@@ -259,10 +259,14 @@
         flex: 1 1 auto;
         min-width: 0;
         min-height: 0;
-        /* Transparent: each pane's xterm canvas paints --surface-raised
-           itself (at the chosen opacity), so tinting here too would
-           double the tint wherever a terminal sits. */
-        background: transparent;
+        /* The single layer carrying the terminal area's tint, at the
+           opacity chosen in Preferences (--surface-raised is
+           rgba(theme background, opacity) — see appearance.js). The xterm
+           canvases above are fully transparent, so this is not stacked
+           with a second tint, and because it spans the whole pane it also
+           covers the few pixels along the right/bottom edge that xterm's
+           whole-cell canvas sizing always leaves uncovered. */
+        background: var(--surface-raised);
       }
       /* One per tab; holds that tab's split tree. Only the active tab's
          root is displayed (sessionManager toggles display flex/none). */

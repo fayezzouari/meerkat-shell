@@ -3,14 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <title>Meerkat</title>
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/css/xterm.css"
-    />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Instrument+Serif&family=JetBrains+Mono:wght@500;700&family=Fira+Code:wght@400;600&family=IBM+Plex+Mono:wght@400;600&family=Source+Code+Pro:wght@400;600&display=swap"
-    />
+    <!-- Both vendored under ./vendor/ rather than pulled from a CDN: this
+         is a terminal, and a terminal that will not draw its own glyphs
+         without a network is broken. `//go:embed all:frontend` bakes them
+         into the binary, so there is nothing to install alongside it.
+         See scripts/vendor-fonts.sh to refresh either one. -->
+    <link rel="stylesheet" href="./vendor/xterm/xterm.css" />
+    <link rel="stylesheet" href="./vendor/fonts/fonts.css" />
     <style>
       /* These are the "Clay" preset's values, inlined so the first paint
          is already themed. At runtime themes.js overwrites every one of
@@ -600,8 +599,11 @@
       <aside id="sidebar" class="hidden"></aside>
       <div id="panes"></div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/lib/xterm.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10/lib/addon-fit.js"></script>
+    <!-- Classic scripts, not modules: both set globals (window.Terminal,
+         window.FitAddon) that main.js and session.js read, so they must
+         finish executing before the module below runs. -->
+    <script src="./vendor/xterm/xterm.js"></script>
+    <script src="./vendor/xterm/addon-fit.js"></script>
     <script type="module" src="./main.js"></script>
   </body>
 </html>

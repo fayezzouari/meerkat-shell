@@ -8,11 +8,8 @@ import (
 	"sync"
 )
 
-// pathCompleter implements readline.AutoCompleter. The first word on the
-// line completes against shell builtins + everything on $PATH (command
-// position); every later word completes against filesystem entries
-// relative to the daemon's current working directory, mirroring how a
-// normal shell's default Tab completion behaves.
+// pathCompleter implements readline.AutoCompleter: the first word completes
+// against builtins + $PATH, later words against the daemon cwd's entries.
 type pathCompleter struct {
 	cwd *string
 
@@ -105,8 +102,7 @@ func (c *pathCompleter) pathCandidates(prefix string) []string {
 		if !strings.HasPrefix(e.Name(), filePart) {
 			continue
 		}
-		// Hide dotfiles (.ssh, .profile, ...) unless the user already typed
-		// a leading dot themselves, same as zsh/bash's default behavior.
+		// Hide dotfiles unless a leading dot was typed, like zsh/bash.
 		if strings.HasPrefix(e.Name(), ".") && !strings.HasPrefix(filePart, ".") {
 			continue
 		}

@@ -6,20 +6,13 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// buildMenu returns the native macOS menu bar. The very first top-level
-// submenu is always rendered by Cocoa as *the* app menu — its own Label is
-// ignored and replaced with the running app's name — which is what makes
-// this the conventional (Cmd+,) home for "Preferences…" rather than
-// tucking it under Edit. Wails' menu.AppMenuRole would get us the same
-// slot with native About/Hide/Quit items for free, but as an opaque native
-// role it can't be extended with our own item, so this builds the app menu
-// by hand instead (About/Hide/Services just aren't offered — Quit is,
-// since without it there'd be no menu-based way to quit at all).
+// buildMenu returns the native macOS menu bar. Cocoa renders the first
+// top-level submenu as the app menu regardless of its label. Built by hand
+// rather than with menu.AppMenuRole, which is an opaque native role that
+// can't be extended with our own "Preferences…" item.
 //
-// "Preferences…" doesn't open a second OS window — Wails v2 only really
-// supports one — it emits a "preferences:open" event that main.js listens
-// for and shows as an in-page overlay (see preferencesOverlay.js), the
-// same pattern the Ctrl+M jobs overlay already uses.
+// Preferences emits an event rather than opening a second OS window, which
+// Wails v2 doesn't really support.
 func buildMenu(app *App) *menu.Menu {
 	root := menu.NewMenu()
 

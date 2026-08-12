@@ -1,6 +1,5 @@
 // Package daemonclient wraps the connect-or-spawn-then-connect logic shared
-// between meerkat-client (terminal REPL) and meerkat-app (GUI). Kept free of
-// any GUI framework import so it can be unit tested on its own.
+// between meerkat-client and meerkat-app.
 package daemonclient
 
 import (
@@ -17,12 +16,9 @@ import (
 	"time"
 )
 
-// Wire protocol: 4-byte big-endian length prefix, then a payload whose
-// first byte is a type tag. Matches meerkat-daemon's `packet: 4` socket —
-// see meerkat_daemon/connection.ex for the full type list. Framed rather
-// than line-delimited because pty output can't safely be split on "\n"
-// (curses programs/progress bars redraw with "\r" and cursor escapes that
-// may never contain a newline).
+// Wire protocol: 4-byte big-endian length prefix, then a payload whose first
+// byte is a type tag — meerkat-daemon's `packet: 4` socket. Framed rather than
+// line-delimited because pty output can't safely be split on "\n".
 const (
 	MsgLine   = 'L' // client -> daemon: one full command line
 	MsgInput  = 'I' // client -> daemon: raw bytes for the running job's pty stdin
@@ -67,13 +63,9 @@ func dial(path string) (net.Conn, error) {
 	return net.DialTimeout("unix", path, 500*time.Millisecond)
 }
 
-// ConnectExisting dials the daemon directly, without the spawn-if-missing
-// logic Connect uses. For callers that already know the daemon is up
-// (e.g. opening a second tab after the first one already connected
-// successfully) — spawn-if-missing is a "just in case" for the very first
-// connection of the process; running it again for every subsequent
-// connection risks two callers racing to spawn `mix run` concurrently if
-// they're called close together before the first spawn finishes.
+// ConnectExisting dials without Connect's spawn-if-missing logic, for callers
+// that already know the daemon is up. Spawning on every connection would risk
+// two callers racing to start `mix run`.
 func ConnectExisting() (*Client, error) {
 	conn, err := dial(SocketPath())
 	if err != nil {
@@ -83,9 +75,7 @@ func ConnectExisting() (*Client, error) {
 }
 
 // Connect dials the daemon, spawning it detached first if nothing answers.
-// Identical behavior to meerkat-client's ensureDaemon — same env vars,
-// same 8s window, same log file convention — so both frontends feel
-// consistent about daemon lifecycle.
+// Mirrors meerkat-client's ensureDaemon.
 func Connect() (*Client, error) {
 	path := SocketPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -139,16 +129,13 @@ func (c *Client) SendLine(line string) error {
 	return c.writeFrame(MsgLine, []byte(line))
 }
 
-// SendInput forwards raw bytes to the currently-running foreground job's
-// pty stdin (keystrokes, including control bytes like Ctrl+C/Ctrl+Z).
+// SendInput forwards raw bytes to the foreground job's pty stdin.
 func (c *Client) SendInput(data []byte) error {
 	return c.writeFrame(MsgInput, data)
 }
 
-// Kill terminates the currently-running foreground job (Ctrl+Z in the
-// GUI — see session.js) — graceful SIGTERM escalating to SIGKILL, same as
-// meerkat's own `kill <id>` builtin. A no-op on the daemon side if no job
-// is running.
+// Kill terminates the foreground job: SIGTERM escalating to SIGKILL, like the
+// `kill <id>` builtin. A no-op if no job is running.
 func (c *Client) Kill() error {
 	return c.writeFrame(MsgKill, nil)
 }

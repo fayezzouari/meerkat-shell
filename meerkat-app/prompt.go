@@ -7,10 +7,7 @@ import (
 	"strings"
 )
 
-// HomeDir returns the user's home directory, used by the frontend to
-// shorten the prompt's cwd display to "~" / "~/sub/dir" the same way a
-// real shell does. Best-effort: an empty string just means the frontend
-// shows the cwd unshortened.
+// HomeDir is best-effort: "" means the frontend shows the cwd unshortened.
 func (a *App) HomeDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -19,21 +16,13 @@ func (a *App) HomeDir() string {
 	return home
 }
 
-// GitStatus is what the frontend needs to swap the prompt's path display
-// for "<repo> <branch> <subpath>" when cwd is inside a git working tree.
 type GitStatus struct {
 	Repo    string `json:"repo"`
 	Branch  string `json:"branch"`
-	Subpath string `json:"subpath"` // cwd's path relative to the repo root, with a leading "/"; "" at the root itself
+	Subpath string `json:"subpath"` // relative to the repo root, leading "/"; "" at the root
 }
 
-// GitInfo reports the repo name (the git root directory's basename),
-// current branch, and cwd's path relative to the repo root, or a
-// zero-value GitStatus if cwd isn't inside a git working tree. Shells out
-// to the `git` binary rather than reading .git/ directly — same "call an
-// OS command from the GUI's own Go process" pattern complete.go already
-// uses for tab completion, since this runs on the same machine as the
-// directories it's inspecting.
+// GitInfo returns a zero-value GitStatus if cwd isn't inside a working tree.
 func (a *App) GitInfo(cwd string) GitStatus {
 	root, err := runGit(cwd, "rev-parse", "--show-toplevel")
 	if err != nil || root == "" {
@@ -46,12 +35,9 @@ func (a *App) GitInfo(cwd string) GitStatus {
 		branch, _ = runGit(cwd, "rev-parse", "--short", "HEAD")
 	}
 
-	// git computes this internally rather than us diffing `root` against
-	// `cwd` ourselves — --show-toplevel resolves symlinks in its output,
-	// but `cwd` (as tracked by meerkat-daemon) may not be (e.g. on macOS
-	// /tmp and /var are themselves symlinks to /private/...), which made
-	// a naive filepath.Rel(root, cwd) produce a nonsensical "../../.."
-	// result even when cwd was exactly the repo root.
+	// Asked of git rather than computed as filepath.Rel(root, cwd):
+	// --show-toplevel resolves symlinks but the daemon's cwd may not, which
+	// produced a nonsensical "../../.." even at the repo root.
 	subpath := ""
 	if prefix, err := runGit(cwd, "rev-parse", "--show-prefix"); err == nil && prefix != "" {
 		subpath = "/" + strings.TrimSuffix(prefix, "/")

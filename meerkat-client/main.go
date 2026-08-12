@@ -1,8 +1,6 @@
-// meerkat-client is the thin native client for meerkat-daemon. It owns nothing but the
-// terminal: reading a line, sending it down a Unix socket, and printing
-// whatever comes back. All parsing, execution, and job state live in the
-// daemon so this binary starts near-instantly and stays that way even as
-// the daemon grows heavier (Oban, erlexec, a TUI job panel, ...).
+// meerkat-client is the thin native client for meerkat-daemon: it reads a
+// line, sends it down a Unix socket, and prints what comes back. All parsing,
+// execution, and job state live in the daemon.
 package main
 
 import (
@@ -22,19 +20,13 @@ import (
 	"github.com/chzyer/readline"
 )
 
-// builtins mirrors MeerkatDaemon.Evaluator's @builtins — kept here only so
-// Tab completion knows about them, not to duplicate any execution logic.
+// Mirrors MeerkatDaemon.Evaluator's @builtins, for completion only.
 var builtins = []string{"cd", "exit", "quit", "jobs", "fg", "bg", "kill", "stop"}
 
-// Wire protocol: 4-byte big-endian length prefix, then a payload whose
-// first byte is a type tag — matches meerkat-daemon's `packet: 4` socket
-// (see meerkat_daemon/connection.ex). meerkat-daemon added real pty
-// support for foreground commands, which needs raw unbuffered output (see
-// the "P" case below) — meerkat-client speaks the same framing to stay
-// compatible, but doesn't put the local terminal into raw mode or forward
-// keystrokes to a running job's pty, so full-screen programs (vim, htop)
-// aren't usable from here. That interactive experience lives in
-// meerkat-app only; this client keeps its existing line-oriented REPL feel.
+// Wire protocol: 4-byte big-endian length prefix, then a payload whose first
+// byte is a type tag — meerkat-daemon's `packet: 4` socket. This client speaks
+// the framing but never puts the local terminal into raw mode or forwards
+// keystrokes to a job's pty, so full-screen programs aren't usable from here.
 const (
 	msgLine   = 'L'
 	msgStdout = 'O'
@@ -89,9 +81,7 @@ func historyPath() string {
 	return filepath.Join(u.HomeDir, ".meerkat", "history")
 }
 
-// startCmd is how the daemon gets launched if it isn't already running.
-// Override via MEERKAT_START_CMD once you're running a built release
-// instead of `mix run` in dev — e.g. "/opt/meerkat/bin/meerkat-daemon start".
+// Override MEERKAT_START_CMD to launch a built release instead of `mix run`.
 func startCmd() (string, string) {
 	cmd := os.Getenv("MEERKAT_START_CMD")
 	if cmd == "" {
@@ -116,8 +106,8 @@ func ensureDaemon(path string) (net.Conn, error) {
 	cmdStr, dir := startCmd()
 	cmd := exec.Command("sh", "-c", cmdStr)
 	cmd.Dir = dir
-	// Detach fully: new session, no controlling terminal, so the daemon
-	// outlives this client and isn't killed by Ctrl+C in the shell tab.
+	// New session, no controlling terminal, so the daemon outlives this
+	// client and survives Ctrl+C in the shell tab.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 
 	logPath := filepath.Join(filepath.Dir(path), "daemon.log")
@@ -158,7 +148,7 @@ func main() {
 	server := bufio.NewReader(conn)
 	cwd := "~"
 
-	// Initial "D" banner sent by the daemon on connect.
+	// Initial "D" banner sent on connect.
 	if msgType, payload, ok := readFrame(server); ok && msgType == msgCwd {
 		cwd = string(payload)
 	}
@@ -181,7 +171,6 @@ func main() {
 		rl.SetPrompt(promptFor(cwd))
 		line, err := rl.Readline()
 		if err == readline.ErrInterrupt {
-			// Ctrl+C on an empty/partial line: bash-style, just start a fresh prompt.
 			continue
 		}
 		if err == io.EOF {
@@ -225,12 +214,8 @@ func promptFor(cwd string) string {
 	return fmt.Sprintf("meerkat %s> ", shorten(cwd))
 }
 
-// processResponseFrame prints one protocol frame and reports whether it was
-// the terminating "X" frame for this command. "P" (raw pty output) is
-// written straight to stdout as-is — this client doesn't put the local
-// terminal into raw mode, so it's not a fully interactive pty experience,
-// but foreground command output (including color/formatting a real
-// terminal would trigger, like `ls`'s column layout) still displays.
+// processResponseFrame prints one frame and reports whether it was the
+// terminating "X" frame for this command.
 func processResponseFrame(msgType byte, payload []byte) (newCwd string, done bool) {
 	switch msgType {
 	case msgStdout:

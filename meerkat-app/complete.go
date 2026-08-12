@@ -8,8 +8,7 @@ import (
 	"sync"
 )
 
-// builtins mirrors MeerkatDaemon.Evaluator's @builtins — kept here only so
-// Tab completion knows about them, not to duplicate any execution logic.
+// Mirrors MeerkatDaemon.Evaluator's @builtins, for completion only.
 var builtins = []string{"cd", "exit", "quit", "jobs", "fg", "bg", "kill", "stop"}
 
 var (
@@ -34,10 +33,8 @@ func loadPathCmds() {
 	}
 }
 
-// Complete returns full candidate tokens (word already included, not just
-// the suffix) for the token `word` under the cursor. isCommand is true
-// when `word` is the first token on the line (command position); path
-// completion is resolved relative to cwd otherwise. Called from JS on Tab.
+// Complete returns full candidate tokens (not just the suffix) for the token
+// under the cursor. isCommand means `word` is in command position.
 func (a *App) Complete(word string, cwd string, isCommand bool) []string {
 	if isCommand {
 		return commandCandidates(word)
@@ -45,16 +42,12 @@ func (a *App) Complete(word string, cwd string, isCommand bool) []string {
 	return pathCandidates(word, cwd)
 }
 
-// matchTier ranks how `query` matches `name` (both should already be
-// lowercased), lower is better, -1 means no match at all:
+// matchTier ranks how `query` matches `name` (both lowercased); lower is
+// better, -1 is no match:
 //
-//	0: name starts with query — typing "gi" and getting "git" first
-//	1: query starts right after a name-word separator (-, _, ., /) —
-//	   typing "fr" finds "prontooo-frontend" (matches at the start of the
-//	   "frontend" segment) ranked above...
-//	2: query occurs anywhere else in name — ...e.g. "infra", where "fr"
-//	   is buried mid-word with no separator before it. Still surfaced
-//	   (better to overmatch than to miss a real candidate), just last.
+//	0: name starts with query
+//	1: query starts right after a name-word separator (-, _, ., /)
+//	2: query occurs anywhere else in name
 func matchTier(name, query string) int {
 	if query == "" || strings.HasPrefix(name, query) {
 		return 0
@@ -73,9 +66,8 @@ func isNameSeparator(b byte) bool {
 	return b == '-' || b == '_' || b == '.' || b == '/'
 }
 
-// rankedCandidates buckets `items` (already resolved to their display
-// strings) by matchTier against `query`, sorting each tier alphabetically,
-// then concatenates best-tier-first.
+// rankedCandidates buckets `items` by matchTier, sorts each tier
+// alphabetically, and concatenates best-tier-first.
 func rankedCandidates(items []string, lowerQuery string, keyOf func(string) string) []string {
 	var tiers [3][]string
 	for _, item := range items {
@@ -124,11 +116,10 @@ func pathCandidates(prefix string, cwd string) []string {
 		return nil
 	}
 
-	names := make(map[string]string, len(entries)) // candidate string -> entry name (for matching)
+	names := make(map[string]string, len(entries)) // candidate -> entry name
 	var candidates []string
 	for _, e := range entries {
-		// Hide dotfiles (.ssh, .profile, ...) unless the user already typed
-		// a leading dot themselves, same as zsh/bash's default behavior.
+		// Hide dotfiles unless a leading dot was typed, like zsh/bash.
 		if strings.HasPrefix(e.Name(), ".") && !strings.HasPrefix(filePart, ".") {
 			continue
 		}

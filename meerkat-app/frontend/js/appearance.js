@@ -1,25 +1,14 @@
 import { getTheme, onThemeChange } from "./themes.js";
 
-// Appearance settings that sit *on top of* the color preset: background
-// opacity, terminal font, and an optional background image. Where
-// themes.js answers "which palette", this answers "how is that palette
-// painted" — so the two compose, and changing either recomputes the same
-// derived values here.
-//
-// This module is the only place that turns a theme + these settings into
-// what the app actually renders. Everything downstream (index.html's CSS,
-// each session's Terminal) subscribes via onAppearanceChange rather than
-// reading themes.js directly, so neither has to know the two were ever
-// separate concerns.
+// Composes the themes.js color preset with background opacity, terminal font
+// and background image. Downstream (index.html's CSS, each Terminal)
+// subscribes via onAppearanceChange rather than reading themes.js directly.
 const STORAGE_KEY = "meerkat.appearance.v1";
 
-// Monospace only, and that is not a stylistic preference — xterm.js lays
-// every glyph into a fixed-width cell, so a proportional face renders with
-// huge gaps after narrow letters instead of as proportional text. The
-// webfont entries must also be vendored into frontend/vendor/fonts by
-// scripts/vendor-fonts.sh — adding one here without adding it to that
-// script's FONT_QUERY silently falls back to the next family in the
-// stack. The last two are system faces and need no such entry.
+// Monospace only — xterm.js lays every glyph into a fixed-width cell. The
+// webfont entries must also be in scripts/vendor-fonts.sh's FONT_QUERY, or
+// they silently fall back to the next family in the stack; the last two are
+// system faces and need no entry.
 export const FONT_FAMILIES = [
   { id: "jetbrains", name: "JetBrains Mono", stack: "'JetBrains Mono', Menlo, monospace" },
   { id: "fira", name: "Fira Code", stack: "'Fira Code', Menlo, monospace" },
@@ -31,16 +20,12 @@ export const FONT_FAMILIES = [
 
 export const FONT_SIZE_MIN = 9;
 export const FONT_SIZE_MAX = 24;
-// Below roughly this the text stops being readable against a busy
-// wallpaper, and the app starts looking broken rather than translucent.
 export const OPACITY_MIN = 0.3;
 
-// backgroundImagePath is a filesystem path (not image data — see app.go's
-// BackgroundImage for why, and for what happens if it goes missing), with
-// two reserved values: this sentinel for the shipped Meerkat mark, and ""
-// for no image at all. A sentinel rather than the asset's own URL so it
-// can't be confused with a real path, and so the bundled file can move
-// without invalidating everyone's stored settings.
+// backgroundImagePath is a filesystem path, with two reserved values: this
+// sentinel for the shipped Meerkat mark, and "" for no image. A sentinel
+// rather than the asset URL, so the bundled file can move without
+// invalidating stored settings.
 export const DEFAULT_BACKGROUND = "__meerkat__";
 const DEFAULT_BACKGROUND_URI = "/assets/meerkat-logo.png";
 
@@ -53,8 +38,7 @@ const DEFAULTS = {
 
 let settings = null;
 // Resolved data: URI for backgroundImagePath, or "" when unset/unreadable.
-// Cached because reading it means round-tripping the whole file through Go
-// and base64 — far too expensive to redo on every re-render.
+// Cached because resolving it round-trips the whole file through Go.
 let backgroundImageURI = "";
 let backgroundImageError = "";
 
@@ -87,16 +71,13 @@ export function fontStackFor(id) {
   return (FONT_FAMILIES.find((f) => f.id === id) || FONT_FAMILIES[0]).stack;
 }
 
-// "#rrggbb" + alpha -> "rgba(r, g, b, a)". Themes store plain hex, but
-// every surface here needs to be painted at the user's opacity.
 function withAlpha(hex, alpha) {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return hex; // already rgba(), or something unexpected — leave it
+  if (!m) return hex; // already rgba(), or unexpected — leave it
   const n = parseInt(m[1], 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
-// Terminal options that no setting controls — cursor style and weights.
 const baseTerminalOptions = {
   fontWeight: 500,
   fontWeightBold: 700,
@@ -104,30 +85,17 @@ const baseTerminalOptions = {
   cursorBlink: true,
 };
 
-// The complete Terminal options implied by the current theme + settings.
-// Used both to construct a Terminal and, via Object.assign, to update a
-// live one — so it has to be the full set, not just the parts that change.
+// Must be the *complete* option set: it both constructs a Terminal and, via
+// Object.assign, updates a live one.
 //
-// The opacity lives on ONE layer — #panes, via --surface-raised — and the
-// xterm canvas on top of it is fully transparent. Both halves of that are
-// load-bearing:
+// Opacity lives on exactly one layer — #panes, via --surface-raised — with
+// the xterm canvas fully transparent. Tinting both stacks them into a
+// darker, seamed result, and tinting the canvas alone leaves the few
+// uncovered pixels along the pane's right/bottom edge showing the desktop.
 //
-//   - The tint must be on exactly one layer. Tinting the canvas *and*
-//     the element behind it stacks the two, so a requested 50% renders
-//     ~75% opaque where they overlap and 50% on the uncovered edge —
-//     the slider stops matching what you see, with a visible seam.
-//   - It must be the DOM layer, not the canvas, because xterm sizes its
-//     canvas to a whole number of cells and always leaves a few pixels
-//     uncovered along a pane's right and bottom edge. Tinting the canvas
-//     leaves that strip showing the desktop, which reads as a border
-//     drawn around every terminal. #panes spans the whole pane.
-//
-// allowTransparency is unconditionally true, NOT derived from the current
-// opacity: it is a construction-time renderer option in xterm.js, so a
-// Terminal built while opaque would bake in `false` and the renderer
-// would then flatten the transparent background below to opaque. It is a
-// capability flag ("this canvas may composite"), not the opacity itself —
-// the opacity is --surface-raised, computed from `s.opacity` in apply().
+// allowTransparency is unconditionally true, not derived from opacity: it's
+// a construction-time renderer option, so a Terminal built while opaque
+// would bake in `false` and flatten the background forever after.
 export function terminalOptionsFor() {
   const s = load();
   const theme = getTheme();
@@ -140,33 +108,26 @@ export function terminalOptionsFor() {
   };
 }
 
-// Pushes the derived values onto :root and notifies subscribers. Called on
-// every settings change and whenever the color preset changes underneath.
 function apply() {
   const s = load();
   const theme = getTheme();
   const root = document.documentElement.style;
 
-  // Translucent variants of the two surface colors. The chrome uses these
-  // instead of --bg/--bg-raised so the whole window fades together rather
-  // than leaving an opaque tab bar floating over a see-through terminal.
+  // The chrome uses these translucent variants instead of --bg/--bg-raised,
+  // so the whole window fades together.
   root.setProperty("--surface", withAlpha(theme.chrome.bg, s.opacity));
   root.setProperty("--surface-raised", withAlpha(theme.chrome.bgRaised, s.opacity));
   root.setProperty("--font-mono", fontStackFor(s.fontFamily));
   root.setProperty("--bg-image", backgroundImageURI ? `url("${backgroundImageURI}")` : "none");
-  // The logo is a mark, so it's drawn at a fixed small size and centered
-  // rather than scaled to the window — filling the height would turn it
-  // into a giant shape behind the text. A user's own wallpaper is a photo
-  // and wants to fill the window instead. #backdrop's fixed low opacity
-  // applies to both — see index.html.
+  // The bundled logo is a mark: fixed small size, centered. A user's own
+  // wallpaper is a photo and wants to fill the window.
   root.setProperty("--bg-image-size", s.backgroundImagePath === DEFAULT_BACKGROUND ? "220px auto" : "cover");
 
   subscribers.forEach((fn) => fn());
 }
 
-// Resolves backgroundImagePath into a data URI via Go. Errors are kept
-// rather than thrown so Preferences can show why an image stopped
-// working (moved, deleted, too large) instead of silently reverting.
+// Errors are kept rather than thrown, so Preferences can show why an image
+// stopped working instead of silently reverting.
 async function loadBackgroundImage() {
   const path = load().backgroundImagePath;
   if (!path) {
@@ -175,8 +136,7 @@ async function loadBackgroundImage() {
     return;
   }
   if (path === DEFAULT_BACKGROUND) {
-    // Bundled asset — served by Wails from the same origin, so it needs no
-    // trip through Go and can never fail the way a user's file can.
+    // Bundled asset — same origin, so no trip through Go.
     backgroundImageURI = DEFAULT_BACKGROUND_URI;
     backgroundImageError = "";
     return;
@@ -197,8 +157,7 @@ export function update(patch) {
   persist();
 
   if (imageChanged) {
-    // Paint the rest of the change immediately; the image can only
-    // follow once Go has read it off disk.
+    // Paint the rest now; the image follows once Go has read it off disk.
     apply();
     loadBackgroundImage().then(apply);
     return;
@@ -212,8 +171,7 @@ export function resetAll() {
   loadBackgroundImage().then(apply);
 }
 
-// Opens the native picker (app.go) and stores the chosen path. Returns
-// true if the user actually picked something.
+// Returns true if the user actually picked something.
 export async function pickBackgroundImage() {
   const path = await window.go.main.App.PickBackgroundImage();
   if (!path) return false;
@@ -231,8 +189,6 @@ export function onAppearanceChange(fn) {
 // the right font and opacity rather than being restyled a frame later.
 export async function initAppearance() {
   load();
-  // The color preset changing rebuilds every derived value here, since
-  // all of them are computed from it.
   onThemeChange(() => apply());
   await loadBackgroundImage();
   apply();

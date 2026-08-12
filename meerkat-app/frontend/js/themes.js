@@ -1,21 +1,8 @@
-// Named color presets. Colors only — every preset shares the same fonts,
-// spacing, and layout (those live in index.html / theme.js); switching a
-// theme only swaps values, never metrics, so nothing reflows and the
-// terminal never needs re-fitting on a theme change.
-//
-// Each preset carries two halves that have to agree with each other:
-//   `chrome`   — the CSS custom properties index.html's rules are written
-//                against, applied to <html> by applyTheme below.
-//   `terminal` — the xterm.js theme object for the canvas itself.
-// `terminal.background` is deliberately the chrome's raised surface, not
-// its base: the terminal canvas sits inside .pane, so matching bgRaised is
-// what keeps the active tab visually connected to the pane instead of
-// ringing the grid with a lighter frame.
-//
-// The 16 ANSI colors aren't decorative — programs pick them by index (ls
-// directory blue, git diff red/green, the prompt's cyan repo + yellow
-// branch from promptInfo.js), so each preset has to define all of them
-// legibly against its own background rather than inheriting a default.
+// Named color presets. Colors only, never metrics, so a theme change never
+// reflows or re-fits the terminal. Each preset has two halves that must agree:
+// `chrome` (CSS custom properties for index.html) and `terminal` (the xterm.js
+// canvas palette). terminal.background matches chrome.bgRaised, since the
+// canvas sits inside .pane.
 
 const STORAGE_KEY = "meerkat.theme.v1";
 
@@ -272,7 +259,7 @@ const BY_ID = new Map(THEMES.map((t) => [t.id, t]));
 const DEFAULT_ID = "clay";
 
 let currentId = null;
-const subscribers = new Set(); // fn(theme) — notified on every applyTheme.
+const subscribers = new Set(); // fn(theme)
 
 export function getThemeId() {
   if (currentId) return currentId;
@@ -285,9 +272,6 @@ export function getTheme() {
   return BY_ID.get(getThemeId());
 }
 
-// Pushes `theme.chrome` onto :root as the CSS custom properties every rule
-// in index.html reads, then hands the theme to subscribers (each open
-// session, so its Terminal can swap its own canvas palette).
 export function applyTheme(id) {
   const theme = BY_ID.get(id) || BY_ID.get(DEFAULT_ID);
   currentId = theme.id;
@@ -310,9 +294,7 @@ export function applyTheme(id) {
   return theme;
 }
 
-// Subscribe to theme changes; returns an unsubscribe function. Called
-// immediately with the current theme so callers don't need a separate
-// "apply the initial value" step.
+// Returns an unsubscribe function. Called immediately with the current theme.
 export function onThemeChange(fn) {
   subscribers.add(fn);
   fn(getTheme());

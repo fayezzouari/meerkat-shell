@@ -1,13 +1,6 @@
-// Local "cooked mode" editing of the command line being composed — echo,
-// backspace, cursor movement, word jumps. The daemon never sees any of
-// this until Enter sends the full line (see main.js's term.onData); once a
-// job is running, none of it applies — see the `jobRunning` branch there,
-// which forwards keystrokes straight to the job's pty instead.
-//
-// State (the line buffer and cursor position) lives in this module's
-// closure rather than as free-standing globals, so main.js and
-// completion.js both go through the same accessors instead of touching
-// shared mutable variables directly.
+// Local "cooked mode" editing of the line being composed. The daemon sees
+// nothing until Enter; once a job is running the pty takes over instead (see
+// session.js's jobRunning branch).
 export function createLineEditor(term) {
   let line = "";
   let cursor = 0;
@@ -54,11 +47,8 @@ export function createLineEditor(term) {
     moveCursor(pos - cursor);
   }
 
-  // Characters that end a "word" for word-jump/word-delete purposes, same
-  // as space — path separators, quotes, and the openers of the bracket
-  // pairs meerkat's own parser cares about, so Option+Left/Right/Delete
-  // stops at "foo-bar/baz:qux" boundaries instead of treating the whole
-  // thing as one word.
+  // Word-jump/word-delete stops at these as well as space, so
+  // "foo-bar/baz:qux" isn't treated as one word.
   const WORD_BOUNDARY_CHARS = new Set([" ", "-", "/", '"', "'", "{", "[", ":", "."]);
 
   function isWordChar(ch) {
@@ -80,18 +70,12 @@ export function createLineEditor(term) {
     return i;
   }
 
-  // Deletes line[start:end] — just replaceRange with empty text, but
-  // named for what callers (Option+Delete/Cmd+Delete below) actually mean.
   function deleteRange(start, end) {
     replaceRange(start, end, "");
   }
 
-  // Replaces line[start:end] with `text` and redraws — the same
-  // cursor-relative rewrite technique insertText/backspace use above: move
-  // the terminal cursor back to `start`, erase to end of line, rewrite.
-  // Used by completion.js to swap a candidate into the word being
-  // completed; assumes the terminal's cursor is currently at `end`
-  // (true right after Tab, or after a previous replaceRange call).
+  // Assumes the terminal cursor is currently at `end` — true right after Tab,
+  // or after a previous replaceRange.
   function replaceRange(start, end, text) {
     const restAfter = line.slice(end);
 

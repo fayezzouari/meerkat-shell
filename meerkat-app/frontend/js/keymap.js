@@ -1,27 +1,14 @@
-// The single source of truth for every remappable keyboard shortcut in the
-// app — what physical key combo triggers which action, the shipped
-// defaults, persistence, and matching a KeyboardEvent against a combo.
+// Owns the bindings only; callers look up an action's combo and decide the
+// effect themselves, which is what lets preferencesOverlay.js edit the whole
+// list generically.
 //
-// This module only owns the *bindings*; it has no idea what "wordLeft"
-// actually does — session.js (and main.js for the couple of global ones)
-// look up an action's combo here and decide the effect themselves. That
-// split is what lets preferencesOverlay.js render/edit the whole list
-// generically, without needing to know what each action means either.
-//
-// Persisted to localStorage rather than round-tripping through Go: Wails'
-// webview keeps its own on-disk profile per app (same as any browser
-// profile), so this survives restarts with no daemon/Go involvement at all.
-// Bumped to v2 when the sidebar toggle moved off Cmd+M. persist() writes
-// the *whole* binding map, so anyone who had ever touched a single
-// shortcut had the old Cmd+M default frozen into their stored copy — and a
-// stored binding wins over a default, so they'd have kept a shortcut that
-// macOS silently swallows for Minimize. Bumping the key is what lets the
-// new default actually reach existing installs.
+// Bump the version to push a changed default to existing installs: persist()
+// writes the whole map, so a stored binding otherwise freezes the old default
+// forever. (v2 = the sidebar toggle moving off Cmd+M.)
 const STORAGE_KEY = "meerkat.keybindings.v2";
 
-// `default` is {key, ctrl, alt, meta, shift} — `key` matches
-// KeyboardEvent.key (single letters stored lower-case; special keys use
-// their DOM names, e.g. "ArrowLeft", "Backspace").
+// `default` is {key, ctrl, alt, meta, shift}; `key` matches KeyboardEvent.key
+// (single letters lower-cased, special keys by DOM name).
 export const ACTIONS = [
   {
     id: "interrupt",
@@ -96,9 +83,8 @@ export const ACTIONS = [
     id: "toggleSidebar",
     label: "Toggle Sidebar",
     description: "Shows open panes and running jobs alongside the terminal.",
-    // Not Cmd+M: macOS binds that to Minimize via the native Window menu,
-    // and Cocoa resolves menu key equivalents before the webview sees the
-    // keystroke — so it never reached this app at all.
+    // Not Cmd+M: Cocoa resolves that to Minimize before the webview ever
+    // sees the keystroke.
     default: { key: "b", meta: true },
   },
   {
@@ -158,8 +144,6 @@ export function resetAll() {
   load();
 }
 
-// Normalizes a KeyboardEvent into the same {key, ctrl, alt, meta, shift}
-// shape a stored combo has, for comparison and for recording a new one.
 export function comboFromEvent(event) {
   return {
     key: normalizeKey(event.key),
@@ -170,8 +154,6 @@ export function comboFromEvent(event) {
   };
 }
 
-// Does this KeyboardEvent trigger action `id`, per its current binding
-// (default or user-remapped)?
 export function matches(event, id) {
   const combo = getBinding(id);
   if (!combo) return false;
@@ -195,8 +177,7 @@ const KEY_LABELS = {
   " ": "Space",
 };
 
-// Human-readable combo label for the preferences UI, macOS symbol style
-// (e.g. "⌘⌥⌫").
+// macOS symbol style, e.g. "⌘⌥⌫".
 export function describeCombo(combo) {
   if (!combo) return "";
   let out = "";

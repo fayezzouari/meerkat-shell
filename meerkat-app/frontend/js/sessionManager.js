@@ -1,27 +1,12 @@
 import { createSession } from "./session.js";
 import { eachLeaf, leavesOf, findLeaf, replaceLeaf, removeLeaf } from "./splitTree.js";
 
-// Owns the open tabs and, within each tab, the split layout: the tab bar
-// DOM, which tab is visible, which pane has focus, and creating/closing
-// sessions.
-//
-// Each tab holds a binary split tree rather than a single pane, because
-// Cmd+D (split right) and Cmd+Shift+D (split down) compose — splitting one
-// half of an existing split has to nest, which a flat list of panes can't
-// represent. Nodes are:
-//
+// Each tab holds a binary split tree, so splits can nest:
 //   leaf   { type: "leaf", id, session, paneEl }
 //   split  { type: "split", dir: "row" | "column", a, b, fraction }
-//
-// `fraction` is how much of the split's main axis child `a` gets (child
-// `b` takes the rest), which is what the draggable divider between them
-// adjusts. A tab with no splits is just a bare leaf as its root.
-//
-// Every leaf owns a persistent paneEl that its Terminal was opened into.
-// Re-rendering a tab's layout re-appends those same elements rather than
-// rebuilding them, so splitting/closing never destroys a live terminal —
-// the DOM move changes the pane's size, and session.js's ResizeObserver
-// refits it from there.
+// `fraction` is the share of the main axis child `a` gets. Leaves own a
+// persistent paneEl that gets re-appended, never rebuilt — rebuilding would
+// destroy a live terminal.
 export function createSessionManager({ tabBarEl, panesEl }) {
   const tabs = []; // { id, rootEl, root, activeLeafId }
   let activeTabId = null;
@@ -33,15 +18,9 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     onToggleSidebar = fn;
   }
 
-  // Called whenever the set of panes or which one is focused changes, so
-  // the sidebar's pane list can follow along instead of waiting for its
-  // next poll. Routed through renderTabBar, which every one of those
-  // mutations already calls.
   function setOnLayoutChange(fn) {
     onLayoutChange = fn;
   }
-
-  // --- tab/leaf lookup -------------------------------------------------
 
   function findTab(tabId) {
     return tabs.find((t) => t.id === tabId);
@@ -51,7 +30,6 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     return findTab(activeTabId);
   }
 
-  // Which tab contains the session `sessionId`, if any.
   function tabOfSession(sessionId) {
     return tabs.find((t) => findLeaf(t.root, sessionId));
   }
@@ -65,11 +43,6 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     return activeLeaf()?.session;
   }
 
-  // --- rendering -------------------------------------------------------
-
-  // Rebuilds one tab's DOM from its tree. Panes are moved, not recreated
-  // (see the module comment); everything else — split containers and
-  // dividers — is disposable scaffolding rebuilt each time.
   function renderTab(tab) {
     tab.rootEl.innerHTML = "";
     if (!tab.root) return;
@@ -104,10 +77,8 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     return el;
   }
 
-  // Dragging a divider only rewrites the two flex-basis values in place —
-  // no re-render, so the terminals on either side aren't reparented
-  // mid-drag (which would blow away xterm's canvas every mousemove). The
-  // ResizeObserver in session.js picks up the new sizes and refits.
+  // Rewrites the two flex values in place rather than re-rendering: a
+  // reparent mid-drag would blow away xterm's canvas every mousemove.
   function attachDividerDrag(divider, splitEl, node, tab) {
     divider.addEventListener("mousedown", (event) => {
       event.preventDefault();
@@ -118,9 +89,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
 
       const onMove = (e) => {
         const pos = horizontal ? e.clientX - rect.left : e.clientY - rect.top;
-        // Clamped so a pane can't be dragged to nothing — below roughly
-        // this, xterm has no rows/cols left to render and fit() starts
-        // proposing degenerate sizes.
+        // Clamped so a pane can't be dragged down to a degenerate size.
         node.fraction = Math.min(0.9, Math.max(0.1, pos / total));
         splitEl.children[0].style.flex = `${node.fraction} 1 0`;
         splitEl.children[2].style.flex = `${1 - node.fraction} 1 0`;
@@ -136,9 +105,6 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     });
   }
 
-  // The focus ring only appears once a tab actually has more than one
-  // pane — with a single pane there's nothing to disambiguate, and an
-  // outline around the whole terminal would just be noise.
   function updateFocusRing(tab) {
     const leaves = leavesOf(tab.root);
     leaves.forEach((leaf) => {
@@ -147,8 +113,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
   }
 
   function renderTabBar() {
-    // Removes only .tab children rather than wiping innerHTML, so any
-    // static markup the bar picks up later survives a re-render.
+    // Removes only .tab children, so static markup in the bar survives.
     tabBarEl.querySelectorAll(".tab").forEach((el) => el.remove());
     tabs.forEach((tab) => {
       const tabEl = document.createElement("div");
@@ -160,7 +125,6 @@ export function createSessionManager({ tabBarEl, panesEl }) {
       label.textContent = labelFor(leaf?.session.getCwd() || "");
       tabEl.appendChild(label);
 
-      // Split count, so a tab with panes hidden behind it still says so.
       const paneCount = leavesOf(tab.root).length;
       if (paneCount > 1) {
         const badge = document.createElement("span");
@@ -185,17 +149,10 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     onLayoutChange();
   }
 
-  // Short tab label — the cwd's last path segment (e.g. "meerkat" for
-  // /Users/fayez/projects/meerkat, "fayez" for /Users/fayez). Doesn't need
-  // to be globally unique; it's a hint, not an identifier.
   function labelFor(cwd) {
     return cwd.split("/").filter(Boolean).pop() || "/";
   }
 
-  // --- creating sessions -----------------------------------------------
-
-  // One place that knows how to wire a new session's callbacks back to
-  // this module, used for both "new tab" and "split the current pane".
   async function spawnLeaf({ initialCwd }) {
     const paneEl = document.createElement("div");
     paneEl.className = "pane";
@@ -210,9 +167,8 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     });
 
     const leaf = { type: "leaf", id: session.id, session, paneEl };
-    // Clicking anywhere in a pane focuses it — the same "click to focus"
-    // every split-pane terminal has. mousedown rather than click so the
-    // focus ring moves on press, before any text selection drag starts.
+    // mousedown rather than click, so the focus ring moves on press, before
+    // any text-selection drag starts.
     paneEl.addEventListener("mousedown", () => focusLeaf(session.id));
     return leaf;
   }
@@ -230,11 +186,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     try {
       leaf = await spawnLeaf({ initialCwd: inheritCwd });
     } catch (err) {
-      // Without this the promise just rejects into nothing and the window
-      // stays blank forever, with the real reason only visible in
-      // ~/.meerkat/daemon.log. The daemon failing to start is the common
-      // case (a stale socket, or `mix run` spawned outside the project
-      // directory), so say so and offer a retry rather than dying silently.
+      // Otherwise the rejection goes nowhere and the window stays blank.
       showTabError(tab, err);
       switchToTab(tab.id);
       return;
@@ -250,11 +202,8 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     tab.rootEl.innerHTML = "";
     const box = document.createElement("div");
     box.className = "pane-error";
-    // Deliberately not "can't reach the daemon": anything thrown while
-    // building a session lands here, including plain frontend bugs, and
-    // naming one specific cause sends you looking in the wrong place. The
-    // daemon is only *offered* as the likely cause, below the actual
-    // error text.
+    // Deliberately generic: any throw while building a session lands here,
+    // so the daemon is only offered as a likely cause, not asserted.
     box.innerHTML = `
       <div class="pane-error-title">Couldn't open this terminal</div>
       <div class="pane-error-detail"></div>
@@ -289,9 +238,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     tab.rootEl.appendChild(box);
   }
 
-  // Splits the focused pane, putting the new session to its right
-  // ("row") or below it ("column"). The new pane inherits the cwd of the
-  // pane it was split from, the way a new tab inherits the active tab's.
+  // "row" puts the new pane to the right, "column" below.
   async function splitActive(dir) {
     const tab = activeTab();
     const leaf = activeLeaf();
@@ -312,8 +259,6 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     newLeaf.session.focus();
   }
 
-  // --- focus / switching -----------------------------------------------
-
   function focusLeaf(sessionId) {
     const tab = tabOfSession(sessionId);
     if (!tab) return;
@@ -333,20 +278,16 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     }
     activeTabId = tabId;
 
-    // A display:none xterm.js instance can miscompute layout; re-fitting
-    // every pane in the tab on becoming visible is cheap insurance.
+    // A display:none xterm.js instance can miscompute layout.
     eachLeaf(tab.root, (leaf) => leaf.session.fit());
     if (focus) findLeaf(tab.root, tab.activeLeafId)?.session.focus();
     renderTabBar();
   }
 
-  // Public switchTo takes a *session* id (that's what the jobs overlay
-  // lists), and focuses that pane, switching tabs if it lives elsewhere.
+  // Takes a *session* id — that's what the jobs overlay lists.
   function switchTo(sessionId) {
     focusLeaf(sessionId);
   }
-
-  // --- closing ---------------------------------------------------------
 
   function closeTab(tabId) {
     if (tabs.length <= 1) return; // always keep at least one tab open
@@ -364,10 +305,8 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     }
   }
 
-  // One pane's daemon connection closed — typing `exit`/`quit`, the daemon
-  // dying, whatever. The pane goes away and its split collapses into its
-  // sibling; if it was the tab's last pane the tab closes too, and if that
-  // was the last tab the app quits, same as a real terminal.
+  // The pane goes away and its split collapses into its sibling; the last
+  // pane closes the tab, and the last tab quits the app.
   function handleSessionEnded(sessionId) {
     const tab = tabOfSession(sessionId);
     if (!tab) return;
@@ -377,7 +316,6 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     tab.root = removeLeaf(tab.root, sessionId);
 
     if (tab.root) {
-      // Focus falls to some surviving pane rather than nothing.
       if (tab.activeLeafId === sessionId) {
         tab.activeLeafId = leavesOf(tab.root)[0]?.id ?? null;
       }
@@ -402,10 +340,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     }
   }
 
-  // --- public surface --------------------------------------------------
-
-  // Every pane across every tab — the jobs overlay lists sessions, not
-  // tabs, so a split tab contributes one entry per pane.
+  // One entry per pane, across every tab.
   function list() {
     const out = [];
     for (const tab of tabs) {

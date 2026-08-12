@@ -6,13 +6,9 @@ function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
-// Preferences overlay: lists every remappable shortcut (see keymap.js) and
-// lets the user click "Change" then press a new combo to rebind it. Same
-// plain DOM/CSS approach as sidebar.js — opened from the native App
-// menu's "Preferences…" item (main.js listens for the "preferences:open"
-// Wails event) rather than a keyboard shortcut of its own, since Cmd+, is
-// already claimed by macOS convention for exactly this and Wails routes it
-// straight to the menu item.
+// Opened from the native App menu's "Preferences…" item (main.js listens for
+// the "preferences:open" event) rather than a shortcut of its own, since
+// macOS routes Cmd+, straight to the menu item.
 export function createPreferencesOverlay() {
   const root = document.createElement("div");
   root.id = "prefs-overlay";
@@ -23,7 +19,7 @@ export function createPreferencesOverlay() {
     if (event.target === root) close();
   });
 
-  let recordingId = null; // action id currently waiting for a keypress, else null.
+  let recordingId = null; // action id waiting for a keypress, else null
 
   function renderRow(action) {
     const recording = action.id === recordingId;
@@ -41,9 +37,6 @@ export function createPreferencesOverlay() {
     `;
   }
 
-  // Each preset renders as a swatch trio (background / accent / foreground)
-  // pulled straight from the theme's own values, so the list previews what
-  // it's offering rather than just naming it.
   function renderThemes() {
     const activeId = getThemeId();
     return THEMES.map(
@@ -61,9 +54,8 @@ export function createPreferencesOverlay() {
     ).join("");
   }
 
-  // Opacity / font / background image. Everything here is applied live on
-  // input rather than behind an Apply button — they're all visual, so the
-  // window behind this panel *is* the preview.
+  // Applied live on input rather than behind an Apply button: the window
+  // behind this panel is the preview.
   function renderAppearance() {
     const s = appearance.getSettings();
     const imgError = appearance.getBackgroundImageError();
@@ -124,8 +116,8 @@ export function createPreferencesOverlay() {
     const range = root.querySelector("#opacity-range");
     const value = root.querySelector("#opacity-value");
     range.addEventListener("input", () => {
-      // Update the number directly instead of re-rendering: a full render
-      // would rebuild the slider mid-drag and drop the pointer capture.
+      // Not a full render: rebuilding the slider mid-drag drops the
+      // pointer capture.
       value.textContent = `${range.value}%`;
       appearance.update({ opacity: Number(range.value) / 100 });
     });
@@ -176,7 +168,7 @@ export function createPreferencesOverlay() {
       card.addEventListener("click", (event) => {
         event.stopPropagation();
         applyTheme(card.dataset.themeId);
-        render(); // re-render so the active outline moves to the new pick
+        render();
       });
     });
 
@@ -201,10 +193,8 @@ export function createPreferencesOverlay() {
     });
   }
 
-  // Captures the very next keydown anywhere while a row is in "recording"
-  // mode — used=true swallows it so it never reaches xterm.js/the rest of
-  // the app (there's no session focused behind the overlay anyway, but a
-  // stray Enter/Escape shouldn't leak through regardless).
+  // Captures the next keydown anywhere while a row is recording, and swallows
+  // it so it never reaches xterm.js.
   document.addEventListener(
     "keydown",
     (event) => {
@@ -216,13 +206,13 @@ export function createPreferencesOverlay() {
         render();
         return;
       }
-      // Modifier keys pressed alone aren't a usable combo — keep waiting.
+      // A bare modifier isn't a usable combo — keep waiting.
       if (["Control", "Alt", "Meta", "Shift"].includes(event.key)) return;
       keymap.setBinding(recordingId, keymap.comboFromEvent(event));
       recordingId = null;
       render();
     },
-    true, // capture — must win the race against session.js's own attachCustomKeyEventHandler
+    true, // capture — must beat session.js's attachCustomKeyEventHandler
   );
 
   let visible = false;

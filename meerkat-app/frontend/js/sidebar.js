@@ -4,27 +4,15 @@ function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
-// memoryKB is the RSS of the job's whole process tree (see app.go's
-// processTreeRSSKB), not just its top-level process — a `cmd1 | cmd2`
-// background job's real footprint is the sum of every stage.
 function formatMemory(kb) {
   if (kb === null || kb === undefined) return "";
   if (kb >= 1024) return `${(kb / 1024).toFixed(1)} MB`;
   return `${kb} KB`;
 }
 
-// The Cmd+B sidebar: open panes and running jobs, shown beside the
-// terminal rather than floating over it.
-//
-// Being persistent rather than modal changes two things versus the old
-// overlay. It takes horizontal space from the terminals instead of
-// covering them (see index.html's #workspace flex row — the panes shrink,
-// and session.js's ResizeObserver refits them), and its contents have to
-// stay current while it sits open, hence the poll below. Jobs come from
-// ListJobs() (app.go), which reflects meerkat-daemon's single shared
-// JobManager — the same jobs regardless of which pane is focused, so this
-// isn't scoped to one session; it's every job from every pane (and the
-// CLI, if one's connected).
+// Persistent, not modal: it takes horizontal space from the terminals rather
+// than covering them, and so has to stay current while open — hence the poll
+// in open(). Jobs are daemon-wide, not scoped to the focused pane.
 export function createSidebar(sessionManager) {
   const root = document.getElementById("sidebar");
   let visible = false;
@@ -73,8 +61,6 @@ export function createSidebar(sessionManager) {
       </div>
     `;
     root.querySelectorAll(".sidebar-session").forEach((row) => {
-      // Focuses that pane (switching tabs if it lives in another one).
-      // The sidebar stays open — that's the point of it not being modal.
       row.addEventListener("click", () => sessionManager.switchTo(row.dataset.id));
     });
   }
@@ -82,8 +68,7 @@ export function createSidebar(sessionManager) {
   async function refresh() {
     if (!visible) return;
     const [jobs, sessions] = await Promise.all([daemon.listJobs().catch(() => []), sessionManager.list()]);
-    // "done" jobs pile up over a session and aren't actionable — this is
-    // meant to be a live view of what's actually going on, not a history.
+    // A live view, not a history: "done" jobs just pile up.
     const activeJobs = jobs.filter((j) => j.status === "running" || j.status === "stopped");
     render(sessions, activeJobs);
   }
@@ -92,9 +77,7 @@ export function createSidebar(sessionManager) {
     visible = true;
     root.classList.remove("hidden");
     refresh();
-    // Jobs start, finish, and change memory footprint while the sidebar
-    // sits open; without polling it would silently go stale the moment it
-    // was shown. Cleared on close so a hidden sidebar costs nothing.
+    // Cleared on close, so a hidden sidebar costs nothing.
     pollTimer = setInterval(refresh, 2000);
   }
 
@@ -110,7 +93,5 @@ export function createSidebar(sessionManager) {
     else open();
   }
 
-  // Lets the rest of the app push an immediate update (e.g. a pane was
-  // split or closed) instead of waiting out the poll interval.
   return { toggle, open, close, refresh, isOpen: () => visible };
 }

@@ -1,21 +1,14 @@
-// Command history for Up/Down arrow browsing — the CLI (meerkat-client)
-// gets this for free from the chzyer/readline library it uses, but the
-// GUI's hand-rolled line editor never had an equivalent. Session-only
-// (not persisted to disk): each Terminal.onData handler wires Up/Down to
-// up(editor)/down(editor), which swap the recalled entry into the current
-// line via lineEditor's replaceRange.
+// Session-only command history for Up/Down browsing; not persisted to disk.
 export function createHistory() {
   const entries = [];
-  // -1 means "editing the live draft, not browsing history"; otherwise an
-  // index into `entries`, oldest-to-newest, moved toward 0 by Up.
+  // -1 = editing the live draft; otherwise an index into `entries`.
   let index = -1;
   let draft = "";
 
-  // Called on Enter with whatever was just submitted.
   function record(line) {
     if (line.trim() === "") return;
     if (entries.length > 0 && entries[entries.length - 1] === line) {
-      index = -1; // still dedupe adjacent repeats, but nothing new to store
+      index = -1; // dedupe adjacent repeats
       return;
     }
     entries.push(line);
@@ -36,15 +29,14 @@ export function createHistory() {
     } else if (index > 0) {
       recall(editor, index - 1);
     }
-    // else: already at the oldest entry, nothing to do.
   }
 
   function down(editor) {
-    if (index === -1) return; // not browsing — nothing to move toward.
+    if (index === -1) return;
     if (index < entries.length - 1) {
       recall(editor, index + 1);
     } else {
-      recall(editor, -1); // past the newest entry — back to the live draft.
+      recall(editor, -1); // past the newest — back to the live draft
     }
   }
 

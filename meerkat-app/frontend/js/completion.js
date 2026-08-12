@@ -1,17 +1,6 @@
-// Tab-completion menu. First Tab (with >1 match) selects and inserts the
-// first candidate, highlighted below the prompt; further Tab/Shift+Tab and
-// any arrow key cycle the selection and swap it into the line in place —
-// see cycle()/applySelected() — rather than reprinting the candidate list
-// from scratch each time. Enter confirms whatever is currently selected
-// and closes the menu (without submitting the line); any other key also
-// closes the menu, then gets its usual handling.
-//
-// Candidates aren't necessarily prefixed by what was typed — Complete
-// (complete.go) also returns substring matches (so "fr" can find
-// "prontooo-frontend", which contains but doesn't start with "fr") — so
-// completion is always applied by replacing the whole word being
-// completed with the candidate (editor.replaceRange), never by computing
-// and inserting just a "suffix" the way plain prefix-completion could.
+// Candidates aren't necessarily prefixed by what was typed — complete.go also
+// returns substring matches — so completion always replaces the whole word
+// with the candidate, never inserts a computed suffix.
 export function createCompletionMenu(term, editor) {
   // { candidates, dirLen, wordStart, index } while a menu is open, else null.
   let state = null;
@@ -41,18 +30,12 @@ export function createCompletionMenu(term, editor) {
       return;
     }
 
-    // Candidates come back as full tokens (dir prefix included — needed
-    // so applySelected can drop them straight into the line), but showing
-    // "prontooo/x  prontooo/y ..." is just noise once you're already
-    // inside prontooo/ — display only the part past the directory `word`
-    // itself is completing within.
+    // Candidates are full tokens so applySelected can drop them straight
+    // into the line; dirLen trims the shared directory prefix for display.
     state = { candidates, dirLen: word.lastIndexOf("/") + 1, wordStart, index: -1 };
     cycle(1);
   }
 
-  // Moves the menu selection by `delta` (wrapping), swaps the newly
-  // selected candidate into the line, and redraws the list with the
-  // selection highlighted.
   function cycle(delta) {
     const n = state.candidates.length;
     state.index = (state.index + delta + n) % n;
@@ -65,12 +48,8 @@ export function createCompletionMenu(term, editor) {
     editor.replaceRange(state.wordStart, editor.getCursor(), newWord);
   }
 
-  // Draws the candidate list on the line below, selected entry in inverse
-  // video, then returns the cursor to right where it was on the input
-  // line. \x1b[s/\x1b[u (save/restore cursor) mean this doesn't need to
-  // track how many terminal rows the list wraps to — the same total text
-  // length gets written every time (only the inverse-video span moves),
-  // so there's nothing stale left behind to erase first.
+  // Save/restore cursor means this needn't track how many rows the list
+  // wraps to; the text length never changes, only the inverse-video span.
   function render() {
     const items = state.candidates.map((c, i) => {
       const label = c.slice(state.dirLen);
@@ -79,14 +58,12 @@ export function createCompletionMenu(term, editor) {
     term.write("\x1b[s\r\n" + items.join("  ") + "\x1b[u");
   }
 
-  // Erases the candidate list and drops the menu state.
   function close() {
     if (!state) return;
     term.write("\x1b[s\r\n\x1b[0J\x1b[u");
     state = null;
   }
 
-  // Called on Tab: opens the menu, or cycles it if already open.
   async function handleTab(cwd) {
     if (state) {
       cycle(1);
@@ -95,12 +72,9 @@ export function createCompletionMenu(term, editor) {
     await open(cwd);
   }
 
-  // Called for every other keystroke. Returns true if it consumed the
-  // key (menu nav) — false means "not handled, keep processing normally,"
-  // which is also the right answer right after closing the menu: whether
-  // no menu was open at all, or one just got confirmed/closed by this
-  // key, the key still needs its usual handling (Enter submits, typing
-  // keeps editing, ...).
+  // Returns true if the key was consumed as menu navigation. A key that
+  // merely closes the menu returns false — it still needs its usual
+  // handling.
   function handleKey(data) {
     if (!state) return false;
     if (data === "\t") {
@@ -118,10 +92,8 @@ export function createCompletionMenu(term, editor) {
       return true;
     }
     if (data === "\r") {
-      // Enter confirms the highlighted candidate: the menu closes with it
-      // already in the line (cycle() applies as it moves), and the key is
-      // consumed so it doesn't also submit the command. Arrows only ever
-      // move the selection, so confirming is always an explicit Enter.
+      // Confirms the highlighted candidate (cycle() already put it in the
+      // line) and is consumed, so it doesn't also submit the command.
       close();
       return true;
     }

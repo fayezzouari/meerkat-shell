@@ -1,13 +1,15 @@
-import { INSTALL_CMD } from "../data/content.js";
+import { useMemo } from "react";
+import { installCommand } from "../data/install.js";
 import { useCopy } from "../hooks/useCopy.js";
 
 export default function InstallCommand({ id, note, tone = "light" }) {
-  const { copy, label, state } = useCopy(INSTALL_CMD);
+  const command = useMemo(() => installCommand(), []);
+  const { copy, label, state } = useCopy(command);
 
   return (
     <div className={`install ${tone === "dark" ? "install-dark" : ""}`} id={id}>
       <div className="install-cmd">
-        <code>{INSTALL_CMD}</code>
+        <code>{command}</code>
         <button
           type="button"
           onClick={copy}

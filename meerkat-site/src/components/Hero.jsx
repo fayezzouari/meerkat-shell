@@ -1,7 +1,10 @@
+import { isLocalInstall } from "../data/install.js";
 import InstallCommand from "./InstallCommand.jsx";
 import OsSupport from "./OsSupport.jsx";
 
 export default function Hero() {
+  const local = isLocalInstall();
+
   return (
     <main id="top" className="hero container">
       <div className="hero-main">
@@ -19,10 +22,17 @@ export default function Hero() {
         <InstallCommand
           id="install"
           note={
-            <>
-              One command, then you have it.{" "}
-              <span>Nothing is published yet — this link is a placeholder.</span>
-            </>
+            local ? (
+              <>
+                Installs from this server into <span>~/.meerkat</span> — engine, terminal
+                app, and command line.
+              </>
+            ) : (
+              <>
+                One command, then you have it.{" "}
+                <span>Nothing is published yet — this link is a placeholder.</span>
+              </>
+            )
           }
         />
       </div>

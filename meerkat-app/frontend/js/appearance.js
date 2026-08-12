@@ -100,24 +100,26 @@ const baseTerminalOptions = {
 // Used both to construct a Terminal and, via Object.assign, to update a
 // live one — so it has to be the full set, not just the parts that change.
 //
-// The canvas is always fully transparent and the tint comes from #panes
-// behind it (--surface-raised), rather than the canvas painting its own
-// translucent background. Two bugs forced that split, and both come back
-// if this is "optimised" the other way:
+// The opacity lives on ONE layer — #panes, via --surface-raised — and the
+// xterm canvas on top of it is fully transparent. Both halves of that are
+// load-bearing:
 //
-//   - allowTransparency is a construction-time renderer option in
-//     xterm.js. Deriving it from the current opacity meant a Terminal
-//     built while opaque baked in `false`, and every later opacity change
-//     was silently flattened by the renderer — the setting simply did
-//     nothing until the app restarted. It's now unconditionally true, so
-//     opacity is pure CSS on a layer that can always show through.
-//   - xterm sizes its canvas to a whole number of cells, so a pane
-//     usually has a leftover strip along its right/bottom edge. With the
-//     tint on the canvas, that strip was left unpainted and the desktop
-//     showed through it, reading as a stray border around every terminal.
-//     Painting #panes covers the whole pane, leftover included.
+//   - The tint must be on exactly one layer. Tinting the canvas *and*
+//     the element behind it stacks the two, so a requested 50% renders
+//     ~75% opaque where they overlap and 50% on the uncovered edge —
+//     the slider stops matching what you see, with a visible seam.
+//   - It must be the DOM layer, not the canvas, because xterm sizes its
+//     canvas to a whole number of cells and always leaves a few pixels
+//     uncovered along a pane's right and bottom edge. Tinting the canvas
+//     leaves that strip showing the desktop, which reads as a border
+//     drawn around every terminal. #panes spans the whole pane.
 //
-// Keeping the tint in exactly one layer is what stops it from doubling.
+// allowTransparency is unconditionally true, NOT derived from the current
+// opacity: it is a construction-time renderer option in xterm.js, so a
+// Terminal built while opaque would bake in `false` and the renderer
+// would then flatten the transparent background below to opaque. It is a
+// capability flag ("this canvas may composite"), not the opacity itself —
+// the opacity is --surface-raised, computed from `s.opacity` in apply().
 export function terminalOptionsFor() {
   const s = load();
   const theme = getTheme();

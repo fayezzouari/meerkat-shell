@@ -35,14 +35,20 @@ export const FONT_SIZE_MAX = 24;
 // wallpaper, and the app starts looking broken rather than translucent.
 export const OPACITY_MIN = 0.3;
 
+// backgroundImagePath is a filesystem path (not image data — see app.go's
+// BackgroundImage for why, and for what happens if it goes missing), with
+// two reserved values: this sentinel for the shipped Meerkat mark, and ""
+// for no image at all. A sentinel rather than the asset's own URL so it
+// can't be confused with a real path, and so the bundled file can move
+// without invalidating everyone's stored settings.
+export const DEFAULT_BACKGROUND = "__meerkat__";
+const DEFAULT_BACKGROUND_URI = "/assets/meerkat-logo.png";
+
 const DEFAULTS = {
   opacity: 1,
   fontFamily: "jetbrains",
   fontSize: 13,
-  // Empty by default — the app ships with no wallpaper of its own.
-  // Stored as a filesystem path, not image data; see app.go's
-  // BackgroundImage for why, and for what happens if it goes missing.
-  backgroundImagePath: "",
+  backgroundImagePath: DEFAULT_BACKGROUND,
 };
 
 let settings = null;
@@ -148,6 +154,12 @@ function apply() {
   root.setProperty("--surface-raised", withAlpha(theme.chrome.bgRaised, s.opacity));
   root.setProperty("--font-mono", fontStackFor(s.fontFamily));
   root.setProperty("--bg-image", backgroundImageURI ? `url("${backgroundImageURI}")` : "none");
+  // The logo is a mark, so it's drawn at a fixed small size and centered
+  // rather than scaled to the window — filling the height would turn it
+  // into a giant shape behind the text. A user's own wallpaper is a photo
+  // and wants to fill the window instead. #backdrop's fixed low opacity
+  // applies to both — see index.html.
+  root.setProperty("--bg-image-size", s.backgroundImagePath === DEFAULT_BACKGROUND ? "220px auto" : "cover");
 
   subscribers.forEach((fn) => fn());
 }
@@ -159,6 +171,13 @@ async function loadBackgroundImage() {
   const path = load().backgroundImagePath;
   if (!path) {
     backgroundImageURI = "";
+    backgroundImageError = "";
+    return;
+  }
+  if (path === DEFAULT_BACKGROUND) {
+    // Bundled asset — served by Wails from the same origin, so it needs no
+    // trip through Go and can never fail the way a user's file can.
+    backgroundImageURI = DEFAULT_BACKGROUND_URI;
     backgroundImageError = "";
     return;
   }

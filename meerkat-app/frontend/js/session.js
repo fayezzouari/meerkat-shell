@@ -78,6 +78,32 @@ export async function createSession({
     return writeChain;
   }
 
+  // term.write is buffered — xterm parses it asynchronously — so awaiting
+  // its callback is the only way to know the data has actually reached the
+  // screen buffer. Callbacks fire in submission order, so awaiting *any*
+  // write also guarantees everything written before it (including direct,
+  // unqueued keystroke echoes from the line editor) has been parsed.
+  function write(data) {
+    return new Promise((resolve) => term.write(data, resolve));
+  }
+
+  // Writes `data` at the start of a fresh line, emitting the newline only
+  // when the cursor isn't already at column 0. Every producer here —
+  // command output, error output, the prompt — wants to begin on its own
+  // line, but each of them may or may not follow something that already
+  // ended one (Enter's own newline, a previous output line, a pty program's
+  // trailing newline). Unconditionally prefixing "\r\n" is what left a
+  // blank line between every command; asking the buffer where the cursor is
+  // collapses that gap without ever running two lines together.
+  //
+  // The empty write is the flush point: it resolves only once all prior
+  // writes are parsed, so cursorX is current rather than pre-Enter stale.
+  async function writeOnFreshLine(data) {
+    await write("");
+    const prefix = term.buffer.active.cursorX === 0 ? "" : "\r\n";
+    return write(prefix + data);
+  }
+
   // Prompt shows "<repo> <branch>" (colored) inside a git working tree, or
   // the "~"-shortened cwd otherwise — see promptInfo.js. Then a plain white
   // arrow, then switches to bright white (left active, no trailing reset)
@@ -92,7 +118,7 @@ export async function createSession({
     awaitingPrompt = true;
     return enqueueWrite(async () => {
       const location = await locationFor(cwd);
-      term.write(`\x1b[0m\r\n${location} \x1b[97m❯\x1b[0m \x1b[97m`);
+      await writeOnFreshLine(`\x1b[0m${location} \x1b[97m❯\x1b[0m \x1b[97m`);
       awaitingPrompt = false;
     });
   }
@@ -170,9 +196,9 @@ export async function createSession({
   const info = await daemon.openSession({
     onLine: (raw) => {
       if (raw.startsWith("O:")) {
-        enqueueWrite(() => term.write("\r\n" + raw.slice(2)));
+        enqueueWrite(() => writeOnFreshLine(raw.slice(2)));
       } else if (raw.startsWith("E:")) {
-        enqueueWrite(() => term.write(`\r\n\x1b[31m${raw.slice(2)}\x1b[0m`));
+        enqueueWrite(() => writeOnFreshLine(`\x1b[31m${raw.slice(2)}\x1b[0m`));
       } else if (raw.startsWith("D:")) {
         cwd = raw.slice(2);
       } else if (raw.startsWith("X:")) {

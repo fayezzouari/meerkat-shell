@@ -41,6 +41,25 @@ Both frontends are interchangeable views onto the same daemon: start a
 background job from the CLI, then open the GUI and run `jobs` — it's the
 same job table, because the state never lived in the client.
 
+## Installing a build
+
+`scripts/release.sh` builds all three components for the machine it runs on and
+packages them into `meerkat-site/public/downloads/latest/`, which is where the
+site's `install.sh` looks. Serving the site is therefore enough to make a real
+one-line install work:
+
+```
+./scripts/release.sh                 # add --no-app to skip the GUI
+cd meerkat-site && npm run dev
+curl -fsSL http://localhost:5273/install.sh | MEERKAT_BASE_URL=http://localhost:5273 sh
+```
+
+That installs into `~/.meerkat` and leaves you with `meerkat` (the shell),
+`meerkat-app` (the window), and `meerkat-engine` (start/stop/status) in
+`~/.meerkat/bin`. See [`meerkat-site/README.md`](meerkat-site/README.md) for the
+layout it writes and how to uninstall. macOS and Linux only — on Windows, build
+from source as described above.
+
 ## Protocol
 
 Newline-delimited plain text over a Unix domain socket

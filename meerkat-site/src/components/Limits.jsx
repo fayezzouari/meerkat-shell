@@ -6,8 +6,8 @@ export default function Limits() {
   return (
     <Section label="Not there yet" title="Two things to know first" className="limits">
       <div className="limit-grid">
-        {LIMITS.map((limit) => (
-          <article key={limit.title}>
+        {LIMITS.map((limit, i) => (
+          <article key={limit.title} style={{ "--i": i }}>
             <h3>{limit.title}</h3>
             <p><Rich text={limit.body} /></p>
           </article>

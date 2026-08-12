@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
+import Rail from "./Rail.jsx";
 
 // The other half of the demo, below the ground line. It reads the same job the
 // window's transcript came from — so when the window closes, this keeps
 // counting. The clock ticks off the job's own start time, not a render count.
 export default function DaemonPanel({ demo }) {
-  const { job, clients, jobCommand, elapsedFrom } = demo;
+  const { job, clients, jobCommand, elapsedFrom, windowOpen } = demo;
   const [, tick] = useState(0);
 
   useEffect(() => {
@@ -15,7 +16,9 @@ export default function DaemonPanel({ demo }) {
 
   return (
     <section className="chamber" aria-labelledby="daemon-h">
-      <div className="jobs" data-detached={clients === 0}>
+      <Rail where="burrow" live={Boolean(job)} active={Boolean(job) && windowOpen} />
+
+      <div className="jobs" data-detached={clients === 0} data-busy={Boolean(job)}>
         <div className="jobs-head">
           <span>running now</span>
           <span className="socket">
@@ -26,7 +29,10 @@ export default function DaemonPanel({ demo }) {
           {job ? (
             <div className="job-row">
               <span className="job-id">[1]</span>
-              <span className="job-state">running</span>
+              <span className="job-state">
+                <span className="job-dot" aria-hidden="true" />
+                running
+              </span>
               <span className="job-cmd">{jobCommand}</span>
               <span className="job-elapsed">{elapsedFrom(job.startedAt)}</span>
             </div>

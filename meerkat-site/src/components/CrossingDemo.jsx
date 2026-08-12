@@ -1,8 +1,15 @@
-// The window half of the demo: everything above the ground line. It renders
-// only what the transcript holds, and holds nothing itself — the job lives in
-// useDaemonDemo, one level up, shared with the daemon panel below ground.
+import Rail from "./Rail.jsx";
+
+// The window half of the demo: everything above the ground line. It renders only
+// what the transcript holds, and holds nothing itself — the job lives in
+// useDaemonDemo, one level up, shared with the engine panel below ground.
+//
+// The transcript sits at the bottom of the window, where a shell's prompt
+// actually lives, so the prompt does not walk down the box as output arrives.
 export default function CrossingDemo({ demo }) {
-  const { lines, typing, windowOpen, windowTitle, hint, step, steps, done, busy, advance, restart } = demo;
+  const {
+    lines, typing, windowOpen, windowTitle, hint, step, steps, done, busy, job, advance, restart,
+  } = demo;
   const next = steps[step];
 
   return (
@@ -19,40 +26,45 @@ export default function CrossingDemo({ demo }) {
         <div className="window-body" role="log" aria-live="polite" aria-label="Terminal transcript">
           {lines.map((line, i) =>
             line.kind === "input" ? (
-              <div key={i}>
+              <div className="term-line" key={i}>
                 <span className="prompt">meerkat ~ ❯</span> {line.text}
               </div>
             ) : (
-              <div key={i} className="out">{line.text}</div>
+              <div className="term-line out" key={i}>{line.text}</div>
             ),
           )}
-          {typing ? (
-            <div>
-              <span className="prompt">meerkat ~ ❯</span> {typing.text}
-              <span className="cursor" />
-            </div>
-          ) : (
-            <div>
-              <span className="prompt">meerkat ~ ❯</span> <span className="cursor" />
-            </div>
-          )}
+          <div className="term-line">
+            <span className="prompt">meerkat ~ ❯</span>{" "}
+            {typing?.text}
+            {/* A caret holds still while keys are landing and blinks when the
+                shell is waiting, which is what a real one does. */}
+            <span className={`caret${typing ? " is-typing" : ""}`} />
+          </div>
         </div>
       </div>
 
-      <p className="crossing-hint">{hint}</p>
+      <p className="crossing-hint" key={hint}>{hint}</p>
 
       <div className="demo-controls">
-        {!done && (
-          <button className="btn primary" type="button" onClick={advance} disabled={busy}>
+        {!done ? (
+          // Stays clickable while a step plays: a click then fast-forwards it,
+          // rather than being swallowed by a disabled button.
+          <button
+            className="btn primary"
+            type="button"
+            onClick={advance}
+            aria-label={busy ? `${next.action} — skip the animation` : next.action}
+          >
             {next.action}
           </button>
-        )}
-        {done && (
+        ) : (
           <button className="btn ghost" type="button" onClick={restart}>
             Start over
           </button>
         )}
       </div>
+
+      <Rail where="surface" live={Boolean(job)} active={Boolean(job) && windowOpen} />
     </section>
   );
 }

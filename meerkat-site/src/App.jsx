@@ -27,7 +27,7 @@ export default function App() {
         <CrossingDemo demo={demo} />
       </div>
 
-      <GroundLine />
+      <GroundLine demo={demo} />
 
       <div className="burrow">
         <div className="container">

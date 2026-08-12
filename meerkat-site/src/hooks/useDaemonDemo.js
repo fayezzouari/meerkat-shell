@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // The hero demo's state, deliberately held above both views that show it: the
-// terminal window renders `lines`, the daemon panel below the ground line
+// terminal window renders `lines`, the engine panel below the ground line
 // renders `job` and `clients`. Closing the window empties `lines` without
 // touching `job` — which is the product's own argument, expressed as component
 // structure rather than described in a caption.
+//
+// Only the typed input is animated. Output prints in one go, the way a real
+// terminal does; fading each output line in was the tell that this is a webpage
+// pretending to be a shell.
 
 const JOB_CMD = "./backup.sh";
-const TYPE_MS = 38;
+
+// Typing cadence. A fixed interval reads as a machine transcribing; a little
+// jitter, plus a beat before the newline, reads as someone typing.
+const KEY_MS = 24;
+const KEY_JITTER_MS = 26;
+const ENTER_PAUSE_MS = 190;
+const OUTPUT_PAUSE_MS = 240;
 
 export const STEPS = [
   {
@@ -38,15 +48,21 @@ export function useDaemonDemo() {
   );
 
   const [step, setStep] = useState(0);
-  const [lines, setLines] = useState([]);       // rendered transcript
+  const [lines, setLines] = useState([]);       // committed transcript
   const [typing, setTyping] = useState(null);   // the line being typed, if any
   const [windowOpen, setWindowOpen] = useState(true);
   const [windowTitle, setWindowTitle] = useState("meerkat — window 1");
   const [job, setJob] = useState(null);         // { startedAt } — survives the window
-  const jobRef = useRef(null);                  // same value, readable mid-sequence
   const [clients, setClients] = useState(1);
   const [hint, setHint] = useState(IDLE_HINT);
   const [busy, setBusy] = useState(false);
+
+  // A ref, not the `busy` state, is what actually guards a step: several clicks
+  // can land in one tick, before React has re-rendered with busy === true, and
+  // two overlapping runs of a step fight over the same transcript.
+  const busyRef = useRef(false);
+  const skipRef = useRef(false);                // set by a click mid-animation
+  const jobRef = useRef(null);                  // readable mid-sequence
 
   // Guards the async step runners against a real unmount. Reset on mount, not
   // only on cleanup, so StrictMode's simulated remount doesn't leave it stuck.
@@ -59,22 +75,67 @@ export function useDaemonDemo() {
   const push = useCallback((line) => setLines((prev) => [...prev, line]), []);
 
   // Types into `typing`, then commits the finished line to the transcript.
+  //
+  // Driven by elapsed time on a schedule of jittered keystroke times, read on
+  // each animation frame — not by a chain of one timer per character. A chain
+  // stalls mid-word whenever the browser throttles timers (an unfocused or
+  // hidden tab); reading the clock means the line simply catches up to where it
+  // should be as soon as frames resume.
   const typeLine = useCallback(
-    async (text) => {
-      if (reduceMotion) {
-        setTyping({ kind: "input", text });
-        await wait(120);
-      } else {
-        for (let i = 1; i <= text.length; i += 1) {
-          if (cancelled.current) return;
-          setTyping({ kind: "input", text: text.slice(0, i) });
-          await wait(TYPE_MS);
+    (text) =>
+      new Promise((resolve) => {
+        const finish = () => {
+          setTyping(null);
+          push({ kind: "input", text });
+          resolve();
+        };
+
+        if (reduceMotion || skipRef.current) {
+          finish();
+          return;
         }
-      }
-      setTyping(null);
-      push({ kind: "input", text });
-    },
+
+        // Cumulative time at which each character has landed.
+        const schedule = [];
+        let t = 0;
+        for (let i = 0; i < text.length; i += 1) {
+          t += KEY_MS + Math.random() * KEY_JITTER_MS;
+          schedule.push(t);
+        }
+        const total = t + ENTER_PAUSE_MS;
+        const start = performance.now();
+
+        const frame = (now) => {
+          if (cancelled.current) {
+            resolve();
+            return;
+          }
+          if (skipRef.current) {
+            finish();
+            return;
+          }
+
+          const elapsed = now - start;
+          let shown = 0;
+          while (shown < schedule.length && schedule[shown] <= elapsed) shown += 1;
+          setTyping({ text: text.slice(0, shown) });
+
+          if (elapsed >= total) finish();
+          else requestAnimationFrame(frame);
+        };
+
+        requestAnimationFrame(frame);
+      }),
     [push, reduceMotion],
+  );
+
+  // Skippable pause, so a click never has to wait out a beat it did not ask for.
+  const beat = useCallback(
+    async (ms) => {
+      if (reduceMotion || skipRef.current) return;
+      await wait(ms);
+    },
+    [reduceMotion],
   );
 
   const elapsedFrom = useCallback((startedAt) => {
@@ -83,13 +144,21 @@ export function useDaemonDemo() {
   }, []);
 
   const advance = useCallback(async () => {
-    if (busy || step >= STEPS.length) return;
+    // A click while a step is playing means "get on with it", not "do it twice".
+    if (busyRef.current) {
+      skipRef.current = true;
+      return;
+    }
+    if (step >= STEPS.length) return;
+
+    busyRef.current = true;
+    skipRef.current = false;
     setBusy(true);
     const current = STEPS[step];
 
     if (current.id === "start") {
       await typeLine(`${JOB_CMD} &`);
-      await wait(260);
+      await beat(OUTPUT_PAUSE_MS);
       push({ kind: "output", text: "[1] running in the background" });
       jobRef.current = { startedAt: Date.now() };
       setJob(jobRef.current);
@@ -98,7 +167,7 @@ export function useDaemonDemo() {
     if (current.id === "close") {
       setWindowOpen(false);
       setClients(0);
-      await wait(reduceMotion ? 0 : 520);
+      await beat(460);
     }
 
     if (current.id === "reopen") {
@@ -106,29 +175,33 @@ export function useDaemonDemo() {
       setWindowTitle("meerkat — window 2");
       setWindowOpen(true);
       setClients(1);
-      await wait(reduceMotion ? 0 : 420);
+      await beat(380);
       await typeLine("jobs");
-      await wait(240);
+      await beat(OUTPUT_PAUSE_MS);
       // Read the job off the ref, never inside a state updater — updaters run
-      // twice under StrictMode and would print the transcript lines twice.
+      // twice under StrictMode and would print these lines twice.
       push({ kind: "output", text: `[1]  running  ${JOB_CMD}` });
       push({ kind: "output", text: `     still going, ${elapsedFrom(jobRef.current.startedAt)} in` });
     }
 
+    busyRef.current = false;
+    skipRef.current = false;
     if (cancelled.current) return;
     setHint(current.hint);
     setStep(step + 1);
     setBusy(false);
-  }, [busy, elapsedFrom, push, reduceMotion, step, typeLine]);
+  }, [beat, elapsedFrom, push, step, typeLine]);
 
   const restart = useCallback(() => {
+    busyRef.current = false;
+    skipRef.current = false;
+    jobRef.current = null;
     setStep(0);
     setLines([]);
     setTyping(null);
     setWindowOpen(true);
     setWindowTitle("meerkat — window 1");
     setJob(null);
-    jobRef.current = null;
     setClients(1);
     setHint(IDLE_HINT);
     setBusy(false);

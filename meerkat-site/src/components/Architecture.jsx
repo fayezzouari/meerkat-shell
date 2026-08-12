@@ -11,8 +11,8 @@ export default function Architecture() {
       lede="Most shells live and die inside a window. Meerkat puts the engine underneath, and lets windows come and go on top of it."
     >
       <div className="parts">
-        {COMPONENTS.map((part) => (
-          <article className="part" key={part.name}>
+        {COMPONENTS.map((part, i) => (
+          <article className="part" key={part.name} style={{ "--i": i }}>
             <h3>{part.name}</h3>
             <p className="part-kind">{part.kind}</p>
             <p><Rich text={part.body} /></p>

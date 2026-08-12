@@ -147,9 +147,8 @@ export function createSessionManager({ tabBarEl, panesEl }) {
   }
 
   function renderTabBar() {
-    // Only the tabs, not innerHTML — the bar also holds the static #brand
-    // mark from index.html, which a blanket wipe would delete on the first
-    // re-render and never put back.
+    // Removes only .tab children rather than wiping innerHTML, so any
+    // static markup the bar picks up later survives a re-render.
     tabBarEl.querySelectorAll(".tab").forEach((el) => el.remove());
     tabs.forEach((tab) => {
       const tabEl = document.createElement("div");

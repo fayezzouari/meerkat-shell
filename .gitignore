@@ -9,3 +9,14 @@ meerkat-app/frontend/wailsjs/
 
 # Compiled binaries
 meerkat-client/meerkat-client
+
+# Release artifacts built by scripts/release.sh — regenerate, don't commit.
+meerkat-site/public/downloads/
+
+# Elixir build output and deps
+meerkat-daemon/_build/
+meerkat-daemon/deps/
+
+# Site dependencies and build output
+meerkat-site/node_modules/
+meerkat-site/dist/

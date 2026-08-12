@@ -1,0 +1,18 @@
+import { LIMITS } from "../data/content.js";
+import Rich from "./Rich.jsx";
+import Section from "./Section.jsx";
+
+export default function Limits() {
+  return (
+    <Section label="Not there yet" title="Two things to know first" className="limits">
+      <div className="limit-grid">
+        {LIMITS.map((limit) => (
+          <article key={limit.title}>
+            <h3>{limit.title}</h3>
+            <p><Rich text={limit.body} /></p>
+          </article>
+        ))}
+      </div>
+    </Section>
+  );
+}

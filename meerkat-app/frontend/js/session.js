@@ -189,7 +189,12 @@ export async function createSession({
   });
   id = info.id;
   cwd = info.cwd || "~";
-  term.reset();
+  // RIS through term.write rather than term.reset(): reset() acts on the
+  // core synchronously, while the "connecting..." writeln above sits in
+  // xterm's async write buffer and would be flushed *after* it — leaving
+  // the placeholder line on screen above the first prompt. Sent as data,
+  // it's ordered behind that writeln and always wins.
+  term.write("\x1bc");
   // `id` is only just now valid — do this here rather than relying solely
   // on the document.fonts.ready handler above, which can fire (with `id`
   // still null) before this async function even gets this far if fonts

@@ -151,14 +151,14 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     // mark from index.html, which a blanket wipe would delete on the first
     // re-render and never put back.
     tabBarEl.querySelectorAll(".tab").forEach((el) => el.remove());
-    tabs.forEach((tab, index) => {
+    tabs.forEach((tab) => {
       const tabEl = document.createElement("div");
       tabEl.className = "tab" + (tab.id === activeTabId ? " active" : "");
 
       const leaf = findLeaf(tab.root, tab.activeLeafId) || leavesOf(tab.root)[0];
       const label = document.createElement("span");
       label.className = "tab-label";
-      label.textContent = `${index + 1} ${labelFor(leaf?.session.getCwd() || "")}`;
+      label.textContent = labelFor(leaf?.session.getCwd() || "");
       tabEl.appendChild(label);
 
       // Split count, so a tab with panes hidden behind it still says so.

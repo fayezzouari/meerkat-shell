@@ -48,13 +48,20 @@ tarball from `<host>/downloads/latest/`. Build that tarball first:
 ```
 ../scripts/release.sh          # or --no-app to skip the GUI
 npm run dev
-curl -fsSL http://localhost:5273/install.sh | MEERKAT_BASE_URL=http://localhost:5273 sh
+curl -fsSL http://localhost:5273/install.sh | sh
 ```
 
-The `MEERKAT_BASE_URL` is needed because a piped script cannot see the URL it was
-fetched from; without it the installer goes to `meerkat.com`. The page prints
-whichever form matches the host serving it (see `src/data/install.js`), so on
-localhost the displayed command is the one that works.
+That works without naming the host twice because the server rewrites the
+script's `DEFAULT_BASE_URL` to its own address as it serves it — see the
+`meerkat-installer-base-url` plugin in `vite.config.js`. A production build
+leaves the script's own default (`meerkat.com`) unless `MEERKAT_SITE_URL` is set:
+
+```
+MEERKAT_SITE_URL=https://meerkat.com npm run build
+```
+
+`MEERKAT_BASE_URL` still overrides the baked-in value at install time, which is
+what to reach for when serving the page and the downloads from different hosts.
 
 What lands where, with `~/.meerkat` as the default prefix:
 
@@ -81,7 +88,7 @@ erlexec builds a C++ port program), so a Linux tarball has to be built on Linux.
 
 - `meerkat.com` does not serve anything yet, so the command the page shows for
   non-local hosts is still a placeholder and says so. Publishing means putting
-  `dist/` and a built `downloads/latest/` behind that domain; the installer
-  itself needs no change.
+  `dist/` and a built `downloads/latest/` behind that domain, and building with
+  `MEERKAT_SITE_URL` set; the installer itself needs no change.
 - The type faces load from Google Fonts. Self-host them if the page needs to
   work offline.

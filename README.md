@@ -46,12 +46,13 @@ same job table, because the state never lived in the client.
 `scripts/release.sh` builds all three components for the machine it runs on and
 packages them into `meerkat-site/public/downloads/latest/`, which is where the
 site's `install.sh` looks. Serving the site is therefore enough to make a real
-one-line install work:
+one-line install work — the server bakes its own address into the script, so the
+command needs no environment variables:
 
 ```
 ./scripts/release.sh                 # add --no-app to skip the GUI
 cd meerkat-site && npm run dev
-curl -fsSL http://localhost:5273/install.sh | MEERKAT_BASE_URL=http://localhost:5273 sh
+curl -fsSL http://localhost:5273/install.sh | sh
 ```
 
 That installs into `~/.meerkat` and leaves you with `meerkat` (the shell),

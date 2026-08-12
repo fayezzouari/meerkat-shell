@@ -23,6 +23,37 @@ render it — `CrossingDemo` (the window) and `DaemonPanel` (the engine). Closin
 the window clears the transcript without touching the job, which is the product's
 own claim expressed as component structure.
 
+## Motion
+
+The cable (`components/Rail.jsx`) is the one loud element: three segments that
+share an x offset (`--rail-x`) so they read as a single line from the window,
+through the ground, into the job list. It lights when a job exists, carries
+pulses while a window is open, and goes dark and dotted above ground once the
+window closes — the demo's claim, drawn rather than captioned.
+
+Everything else is quiet: a hero that arrives in reading order, sections that
+rise once on entry (`hooks/useReveal.js`), grain on both regions, and hover
+detail on the cards. All of it collapses under `prefers-reduced-motion`, and the
+reveal hook adds its class immediately in that case so nothing depends on an
+animation that never plays.
+
+The typed line is driven by elapsed time on a schedule of jittered keystroke
+times, read on each animation frame — not by one timer per character. A chain of
+timers stalls mid-word whenever the browser throttles or freezes the tab (switch
+away and back, and you would return to half a word); reading the clock means the
+line catches up to where it belongs as soon as frames resume. Output lines are
+not animated at all, because a shell prints rather than fades.
+
+Three traps worth remembering if you edit the animations:
+
+- A step is guarded by a ref, not by the `busy` state. Several clicks can land in
+  one tick, before React re-renders, and two overlapping runs of a step corrupt
+  the transcript. A click during a step fast-forwards it instead of queueing. an animation with
+`fill-mode: both` keeps overriding the properties it animated, which is why
+`.window` uses `backwards` (otherwise `[data-closed]` can never hide it); and an
+IntersectionObserver threshold above 0 can never fire for a section taller than
+the viewport.
+
 ## Layout of the source
 
 ```

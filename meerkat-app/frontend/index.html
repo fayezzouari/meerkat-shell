@@ -202,6 +202,131 @@
         direction: rtl;
         text-align: left;
       }
+      .sidebar-heading-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+      }
+      .sidebar-icon-btn {
+        flex: 0 0 auto;
+        padding: 1px 6px;
+        font-family: inherit;
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--text-faint);
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .sidebar-icon-btn:hover {
+        color: var(--text);
+        background: var(--bg-hover);
+        border-color: var(--border);
+      }
+      .sidebar-icon-danger:hover {
+        color: var(--danger);
+      }
+
+      .sidebar-worktree {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        cursor: pointer;
+      }
+      .sidebar-worktree:hover {
+        background: var(--bg-hover);
+        color: var(--text);
+      }
+      .sidebar-worktree-active {
+        color: var(--text);
+      }
+      .wt-name {
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      /* Only shown when it adds something the directory name doesn't. */
+      .wt-branch {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 11px;
+        color: var(--text-faint);
+        text-align: right;
+      }
+      .wt-tag {
+        flex: 0 0 auto;
+        font-size: 9.5px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        background: var(--bg-hover);
+        border-radius: 3px;
+        padding: 1px 4px;
+      }
+      .wt-tag-dirty {
+        color: var(--warning);
+        background: transparent;
+        font-size: 8px;
+        padding: 0;
+      }
+      .wt-tag-stale {
+        color: var(--danger);
+      }
+      /* Kept out of the layout until hover so the row doesn't reflow, and so a
+         mis-aimed click on a resting row can't start a removal. */
+      .wt-remove {
+        visibility: hidden;
+      }
+      .sidebar-worktree:hover .wt-remove {
+        visibility: visible;
+      }
+      .sidebar-worktree-confirm {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        background: var(--bg-hover);
+      }
+      .wt-confirm-text {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 11px;
+        color: var(--text);
+      }
+      .wt-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 3px 6px;
+        font-family: var(--font-mono);
+        font-size: 11.5px;
+        color: var(--text);
+        background: var(--bg);
+        border: 1px solid var(--accent);
+        border-radius: 4px;
+        outline: none;
+      }
+      .sidebar-hint {
+        padding: 2px 14px 4px;
+        font-size: 10.5px;
+        color: var(--text-faint);
+        overflow-wrap: anywhere;
+      }
+      .sidebar-error {
+        margin: 2px 6px 0;
+        padding: 5px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        color: var(--danger);
+        background: var(--bg-hover);
+        overflow-wrap: anywhere;
+      }
+
       .sidebar-job-top {
         display: flex;
         align-items: baseline;
@@ -501,6 +626,7 @@
         accent-color: var(--accent);
       }
       .prefs-select,
+      .prefs-text,
       .prefs-number {
         flex: 0 0 auto;
         font-family: inherit;
@@ -514,6 +640,16 @@
       }
       .prefs-number {
         width: 56px;
+      }
+      .prefs-text {
+        flex: 0 1 200px;
+        min-width: 0;
+        font-family: var(--font-mono);
+        font-size: 11.5px;
+        outline: none;
+      }
+      .prefs-text:focus {
+        border-color: var(--accent);
       }
       .prefs-error {
         color: var(--danger);

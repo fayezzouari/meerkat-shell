@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import Rail from "./Rail.jsx";
+import Branch from "./Branch.jsx";
 
 // The other half of the demo, below the ground line. It reads the same job the
 // window's transcript came from — so when the window closes, this keeps
@@ -16,7 +16,7 @@ export default function DaemonPanel({ demo }) {
 
   return (
     <section className="chamber" aria-labelledby="daemon-h">
-      <Rail where="burrow" live={Boolean(job)} active={Boolean(job) && windowOpen} />
+      <Branch where="burrow" live={Boolean(job)} active={Boolean(job) && windowOpen} />
 
       <div className="jobs" data-detached={clients === 0} data-busy={Boolean(job)}>
         <div className="jobs-head">

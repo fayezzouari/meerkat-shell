@@ -1,4 +1,4 @@
-import Rail from "./Rail.jsx";
+import Branch from "./Branch.jsx";
 
 // The one crossing on the page: daylight above, burrow below. The sentinel
 // stands on the crest, which is the only place the logo appears at size.
@@ -28,7 +28,7 @@ export default function GroundLine({ demo }) {
         />
       </svg>
       <div className="container ground-rail">
-        <Rail where="ground" live={Boolean(job)} active={Boolean(job) && windowOpen} />
+        <Branch where="ground" live={Boolean(job)} active={Boolean(job) && windowOpen} />
       </div>
     </div>
   );

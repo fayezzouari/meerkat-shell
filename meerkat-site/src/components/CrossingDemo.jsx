@@ -1,4 +1,4 @@
-import Rail from "./Rail.jsx";
+import Branch from "./Branch.jsx";
 
 // The window half of the demo: everything above the ground line. It renders only
 // what the transcript holds, and holds nothing itself — the job lives in
@@ -64,7 +64,7 @@ export default function CrossingDemo({ demo }) {
         )}
       </div>
 
-      <Rail where="surface" live={Boolean(job)} active={Boolean(job) && windowOpen} />
+      <Branch where="surface" live={Boolean(job)} active={Boolean(job) && windowOpen} />
     </section>
   );
 }

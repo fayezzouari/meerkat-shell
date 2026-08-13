@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import Branch from "./Branch.jsx";
 
 // The other half of the demo, below the ground line. It reads the same job the
 // window's transcript came from — so when the window closes, this keeps
 // counting. The clock ticks off the job's own start time, not a render count.
-export default function DaemonPanel({ demo }) {
-  const { job, clients, jobCommand, elapsedFrom, windowOpen } = demo;
+export default function DaemonPanel({ demo, panelRef }) {
+  const { job, clients, jobCommand, elapsedFrom } = demo;
   const [, tick] = useState(0);
 
   useEffect(() => {
@@ -16,9 +15,7 @@ export default function DaemonPanel({ demo }) {
 
   return (
     <section className="chamber" aria-labelledby="daemon-h">
-      <Branch where="burrow" live={Boolean(job)} active={Boolean(job) && windowOpen} />
-
-      <div className="jobs" data-detached={clients === 0} data-busy={Boolean(job)}>
+      <div className="jobs" data-detached={clients === 0} data-busy={Boolean(job)} ref={panelRef}>
         <div className="jobs-head">
           <span>running now</span>
           <span className="socket">

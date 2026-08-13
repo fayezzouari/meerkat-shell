@@ -1,12 +1,8 @@
-import Branch from "./Branch.jsx";
-
 // The one crossing on the page: daylight above, burrow below. The sentinel
 // stands on the crest, which is the only place the logo appears at size.
-export default function GroundLine({ demo }) {
-  const { job, windowOpen } = demo;
-
+export default function GroundLine({ groundRef }) {
   return (
-    <div className="ground">
+    <div className="ground" ref={groundRef}>
       <img className="sentinel" src="/meerkat-logo.png" alt="" width="74" height="131" />
       <svg className="ground-svg" viewBox="0 0 1440 90" preserveAspectRatio="none" aria-hidden="true">
         <defs>
@@ -27,9 +23,6 @@ export default function GroundLine({ demo }) {
           strokeWidth="1.5"
         />
       </svg>
-      <div className="container ground-rail">
-        <Branch where="ground" live={Boolean(job)} active={Boolean(job) && windowOpen} />
-      </div>
     </div>
   );
 }

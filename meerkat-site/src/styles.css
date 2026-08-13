@@ -348,9 +348,7 @@ h1 em {
 
 /* daemon chamber */
 .chamber {
-  /* 60px of headroom: exactly the root segment's height, so it lands on the
-     panel's top edge instead of stopping short or overshooting. */
-  padding: 60px 0 4rem;
+  padding: 2.5rem 0 4rem;
   display: grid;
   gap: 1.8rem 3rem;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
@@ -516,9 +514,7 @@ h1 em {
      the demo controls above, inside the job panel below. A fixed length, not a
      percentage — the three segments hang off containing blocks of different
      widths, and only an absolute offset lines them up. */
-  --rail-x: 400px;
-  /* Fixed, because the branch segment crossing this band is drawn at 1:1. */
-  --ground-h: 72px;
+  --ground-h: clamp(52px, 6vw, 84px);
   --ease-out: cubic-bezier(.22, .61, .24, 1);
 }
 
@@ -615,75 +611,43 @@ h1 em { display: inline-block; animation: settle 1.1s var(--ease-out) .5s both; 
 .reveal.is-in .limit-grid article { opacity: 1; transform: none; }
 
 /* ── the branch ───────────────────────────────────────────────────
-   One stem in three segments, each an SVG at 1:1 with its own height so
-   the leaves never stretch. They share --rail-x and match endpoints, so
-   the curve continues across two section boundaries. */
+   One measured stem joining the window's underside to the engine
+   panel's top edge. It spans two sections, so it is a page-level
+   overlay: last in the DOM, above both, positioned by measurement. */
+
+.page { position: relative; }
 
 .branch {
   position: absolute;
-  width: 80px;
   pointer-events: none;
-  z-index: 2;
+  /* Above .surface's and .burrow's content, which sit at z-index 1. */
+  z-index: 4;
   line-height: 0;
 }
-/* An absolute box is offset from its containing block's padding box, so the
-   segments hanging inside padded containers have to add that padding back to
-   land on the same line as the one that hangs inside a content box. The 40px
-   subtracts the stem's own offset inside its viewBox. */
-.crossing > .branch,
-.ground-rail > .branch { left: calc(var(--pad) + var(--rail-x) - 40px); }
-.chamber > .branch     { left: calc(var(--rail-x) - 40px); }
 
-.branch--surface { bottom: 0; }
-.branch--ground  { top: 0; }
-.branch--burrow  { top: 0; }   /* the chamber's top padding is its height */
-
-.branch-stem {
-  stroke: var(--faint-light);
-  transition: stroke .5s ease, opacity .5s ease;
+/* Bark above the soil, root colour below; the gradient's stops switch at the
+   measured crossing. */
+.branch {
+  --stem-top: rgba(22, 18, 13, .42);
+  --stem-bottom: rgba(239, 234, 222, .34);
 }
-.burrow .branch-stem, .ground .branch-stem { stroke: rgba(239, 234, 222, .3); }
 
-/* Carrying a job: the stem is alive. */
-.branch[data-live="true"] .branch-stem { stroke: color-mix(in srgb, var(--wire) 62%, transparent); }
-/* No window open, so nothing flows through the part above ground. */
-.branch--surface[data-live="true"][data-active="false"] .branch-stem {
-  stroke: var(--faint-light);
-  stroke-dasharray: 3 6;
-}
+.branch-stem { transition: opacity .5s ease; }
+/* Carrying a job, the stem keeps its bark: the leaves and the sap say it is
+   alive, which is truer to a branch than tinting the wood. With no window open
+   nothing flows, so the branch goes bare and fades. */
+.branch[data-live="true"][data-active="false"] .branch-stem { opacity: .55; }
 
 .twig { stroke: var(--faint-light); transition: stroke .5s ease; }
-.burrow .twig, .ground .twig { stroke: rgba(239, 234, 222, .3); }
-.leaf {
-  fill: var(--leaf);
-  transition: fill .5s ease, opacity .5s ease;
-}
 .root {
-  stroke: var(--leaf-dim);
+  stroke: rgba(239, 234, 222, .34);
   transition: stroke .5s ease;
 }
-.branch[data-live="true"] .leaf { fill: var(--leaf-live); }
 .branch[data-live="true"] .root { stroke: color-mix(in srgb, var(--wire) 45%, transparent); }
 
-/* Window closed: the leaves above ground dry and droop. */
-.branch--surface[data-live="true"][data-active="false"] .leaf {
-  fill: var(--leaf-dry);
-  opacity: .5;
-}
-/* Dry leaves fold down toward the twig they hang from. */
-.sprig-state {
-  transform-box: fill-box;
-  transform-origin: 0% 50%;
-  transition: transform .6s var(--ease-out);
-}
-.branch--surface[data-live="true"][data-active="false"] .sprig--leaf {
-  transform: rotate(26deg) scale(.94);
-}
-
-/* Where the root meets the engine. */
 .branch-tip {
   fill: var(--burrow);
-  stroke: rgba(239, 234, 222, .3);
+  stroke: rgba(239, 234, 222, .34);
   stroke-width: 1.4;
   transition: stroke .4s ease, filter .4s ease;
 }
@@ -691,39 +655,60 @@ h1 em { display: inline-block; animation: settle 1.1s var(--ease-out) .5s both; 
   stroke: var(--wire);
   filter: drop-shadow(0 0 5px color-mix(in srgb, var(--wire) 55%, transparent));
 }
+.leaf {
+  fill: var(--leaf);
+  transition: fill .5s ease, opacity .5s ease;
+}
+.branch[data-live="true"] .leaf { fill: var(--leaf-live); }
 
-/* Sap: a short dash sliding down the same curve. Each segment's delay is the
-   time the segment above it takes, so one pulse appears to travel the whole
-   stem rather than three appearing at once. */
+/* Close the window and the branch lets go: every leaf dries, detaches, and drops
+   away, leaving the stem bare — while the root below keeps its glow and the job
+   keeps counting. Opening a window regrows them (see the sprig keys). */
+@keyframes leafFall {
+  0%   { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  18%  { transform: translate(0, -2px) rotate(-6deg); opacity: 1; }
+  100% { transform: translate(var(--fall-x, 6px), 62px) rotate(52deg); opacity: 0; }
+}
+.branch[data-live="true"][data-active="false"] .sprig-fall.is-leaf {
+  animation: leafFall 1.15s cubic-bezier(.36, .06, .5, 1) both;
+  animation-delay: calc(var(--i, 0) * .09s);
+}
+.branch[data-live="true"][data-active="false"] .leaf { fill: var(--leaf-dry); }
+
+/* The bud has nothing to hold on to once the window is gone. */
+.branch-bud { transition: stroke .4s ease, fill .4s ease, opacity .5s ease; }
+.branch[data-live="true"][data-active="false"] .branch-bud { opacity: 0; }
+
+/* Where the stem leaves the window. */
+.branch-bud {
+  fill: var(--daylight);
+  stroke: var(--faint-light);
+  stroke-width: 1.4;
+  transition: stroke .4s ease, fill .4s ease;
+}
+.branch[data-live="true"] .branch-bud { stroke: color-mix(in srgb, var(--wire) 70%, transparent); }
+
+/* Sap: a short dash sliding down the curve, on the measured path length. */
 @keyframes sap {
-  from { stroke-dashoffset: 30; }
-  to   { stroke-dashoffset: -230; }
+  from { stroke-dashoffset: 16; }
+  to   { stroke-dashoffset: var(--sap-end, -230); }
 }
 .branch-flow {
   stroke: var(--wire);
-  stroke-dasharray: 14 246;
+  stroke-dasharray: 14 var(--len, 246);
   filter: drop-shadow(0 0 3px color-mix(in srgb, var(--wire) 60%, transparent));
-  animation: sap 2.6s linear infinite;
+  animation: sap 3.2s linear infinite;
 }
-.branch--surface .branch-flow { animation-delay: 0s; }
-.branch--ground  .branch-flow { animation-delay: .85s; }
-.branch--burrow  .branch-flow { animation-delay: 1.5s; }
 
-/* Growth: the stem draws itself, then the sprigs open, once, on first sight. */
-@keyframes grow { from { stroke-dashoffset: 240; } to { stroke-dashoffset: 0; } }
+/* Growth: the stem draws itself, then the leaves open, once. */
+@keyframes grow { from { stroke-dashoffset: var(--len, 240); } to { stroke-dashoffset: 0; } }
 @keyframes unfurl {
   from { opacity: 0; transform: scale(.2); }
   to   { opacity: 1; transform: scale(1); }
 }
 .branch-stem {
-  stroke-dasharray: 240;
-  animation: grow 1.5s var(--ease-out) both;
-}
-.branch--ground .branch-stem  { animation-delay: .5s; }
-.branch--burrow .branch-stem  { animation-delay: .9s; }
-/* The dashed idle state needs its own dasharray, so it opts out of the draw. */
-.branch--surface[data-live="true"][data-active="false"] .branch-stem {
-  animation: none;
+  stroke-dasharray: var(--len, 240);
+  animation: grow 1.6s var(--ease-out) both;
 }
 .sprig {
   transform-box: fill-box;
@@ -731,17 +716,13 @@ h1 em { display: inline-block; animation: settle 1.1s var(--ease-out) .5s both; 
   animation: unfurl .7s var(--ease-out) both;
   animation-delay: calc(.55s + var(--i, 0) * .12s);
 }
-.branch--ground .sprig { animation-delay: calc(1s + var(--i, 0) * .12s); }
-.branch--burrow .sprig { animation-delay: calc(1.4s + var(--i, 0) * .12s); }
+/* Leaves that grow back after a window reopens should not wait out the first
+   load's delay. */
+.branch[data-live="true"][data-active="true"] .sprig {
+  animation-delay: calc(var(--i, 0) * .07s);
+}
 
 .crossing { position: relative; }
-.ground   { position: relative; }
-.chamber  { position: relative; }
-.ground-rail {
-  position: absolute;
-  inset: 0;
-  padding-bottom: 0;
-}
 @media (max-width: 900px) { .branch { display: none; } }
 
 /* ── the ground line, alive ───────────────────────────────────────
@@ -915,6 +896,7 @@ h1 em { display: inline-block; animation: settle 1.1s var(--ease-out) .5s both; 
   }
   .section::before { width: 100%; }
   .branch-flow { display: none; }
+  .sprig-fall.is-leaf { animation: none !important; opacity: .5; }
   /* The stem is only visible because `grow` fills its dashoffset. */
   .branch-stem { stroke-dasharray: none; stroke-dashoffset: 0; }
   .sprig { opacity: 1; transform: none; }

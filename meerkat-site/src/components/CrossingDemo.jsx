@@ -1,14 +1,12 @@
-import Branch from "./Branch.jsx";
-
 // The window half of the demo: everything above the ground line. It renders only
 // what the transcript holds, and holds nothing itself — the job lives in
 // useDaemonDemo, one level up, shared with the engine panel below ground.
 //
 // The transcript sits at the bottom of the window, where a shell's prompt
 // actually lives, so the prompt does not walk down the box as output arrives.
-export default function CrossingDemo({ demo }) {
+export default function CrossingDemo({ demo, windowRef }) {
   const {
-    lines, typing, windowOpen, windowTitle, hint, step, steps, done, busy, job, advance, restart,
+    lines, typing, windowOpen, windowTitle, hint, step, steps, done, busy, advance, restart,
   } = demo;
   const next = steps[step];
 
@@ -18,7 +16,7 @@ export default function CrossingDemo({ demo }) {
         Try it: start a job, close the window, open a new one
       </h2>
 
-      <div className="window" data-closed={!windowOpen}>
+      <div className="window" data-closed={!windowOpen} ref={windowRef}>
         <div className="window-bar">
           <span className="dot" aria-hidden="true" />
           <span className="window-title">{windowTitle}</span>
@@ -63,8 +61,6 @@ export default function CrossingDemo({ demo }) {
           </button>
         )}
       </div>
-
-      <Branch where="surface" live={Boolean(job)} active={Boolean(job) && windowOpen} />
     </section>
   );
 }

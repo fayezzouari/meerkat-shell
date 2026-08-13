@@ -25,11 +25,28 @@ own claim expressed as component structure.
 
 ## Motion
 
-The cable (`components/Rail.jsx`) is the one loud element: three segments that
-share an x offset (`--rail-x`) so they read as a single line from the window,
-through the ground, into the job list. It lights when a job exists, carries
-pulses while a window is open, and goes dark and dotted above ground once the
-window closes — the demo's claim, drawn rather than captioned.
+The branch (`components/Branch.jsx`) is the one loud element: one stem from the
+underside of the terminal window to the top edge of the engine's job list,
+crossing the soil line between them — leaves above ground, rootlets below. It
+carries sap while a window is open. Close the window and it lets go: the leaves
+dry, detach, and drop away in sequence, the bud at the window fades, and the stem
+is left bare — while the root below keeps its glow and the clock keeps counting.
+Open a new window and they grow back. That is the demo's claim drawn rather than
+captioned.
+
+The fall drops straight down whatever angle a leaf hangs at, which is why each
+sprig has a placement group, a fall group, an angle group, a state group and an
+animation group: one transform each. Regrowth works by counting windows opened
+and putting that count in each sprig's key, so a new window remounts them and
+the unfurl animation plays again instead of the leaves snapping back.
+
+It is measured, not hand-drawn. The two boxes it joins live in different sections,
+so it is a page-level overlay (last in `App.jsx`, above both) rather than a child
+of either: a passive effect reads both rectangles plus the ground band, builds the
+curve, and re-runs on resize. Leaves are placed with `getPointAtLength` and angled
+off the tangent, so nothing drifts off the curve when the curve changes, and each
+sprig becomes a leaf or a rootlet depending on which side of the soil line it
+landed on. The stroke is a gradient whose stops switch at that same crossing.
 
 Everything else is quiet: a hero that arrives in reading order, sections that
 rise once on entry (`hooks/useReveal.js`), grain on both regions, and hover
@@ -44,15 +61,22 @@ away and back, and you would return to half a word); reading the clock means the
 line catches up to where it belongs as soon as frames resume. Output lines are
 not animated at all, because a shell prints rather than fades.
 
-Three traps worth remembering if you edit the animations:
+Five traps worth remembering if you edit this:
 
+- A CSS `transform` replaces an SVG `transform` attribute rather than composing
+  with it. Anything animated on top of a placed sprig needs its own nested `<g>`,
+  or every sprig snaps back to the origin.
+- A child's layout effect runs *before* an ancestor's ref is attached — React
+  walks children first in the same commit phase. Measuring a parent box belongs
+  in a passive effect, where refs already exist.
 - A step is guarded by a ref, not by the `busy` state. Several clicks can land in
   one tick, before React re-renders, and two overlapping runs of a step corrupt
-  the transcript. A click during a step fast-forwards it instead of queueing. an animation with
-`fill-mode: both` keeps overriding the properties it animated, which is why
-`.window` uses `backwards` (otherwise `[data-closed]` can never hide it); and an
-IntersectionObserver threshold above 0 can never fire for a section taller than
-the viewport.
+  the transcript. A click during a step fast-forwards it instead of queueing.
+- An animation with `fill-mode: both` keeps overriding the properties it
+  animated, which is why `.window` uses `backwards` — otherwise `[data-closed]`
+  can never hide it again.
+- An IntersectionObserver threshold above 0 can never fire for a section taller
+  than the viewport, so the reveal hook uses 0.
 
 ## Layout of the source
 

@@ -4,6 +4,16 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      bump:
+        description: "Which part of the version to increment"
+        type: choice
+        default: patch
+        options: [patch, minor, major, none]
+      version:
+        description: "Exact version instead, e.g. 0.4.0"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -20,17 +30,66 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - id: tag
+        env:
+          BUMP: ${{ inputs.bump }}
+          EXACT: ${{ inputs.version }}
         run: |
-          version="$(tr -d '[:space:]' < VERSION)"
+          current="$(tr -d '[:space:]' < VERSION)"
+          version="$current"
+
+          if [ -n "$EXACT" ]; then
+            version="${EXACT#v}"
+          elif [ -n "$BUMP" ] && [ "$BUMP" != none ]; then
+            major="${current%%.*}"
+            rest="${current#*.}"
+            minor="${rest%%.*}"
+            patch="${rest##*.}"
+            case "$BUMP" in
+              major) major=$((major + 1)); minor=0; patch=0 ;;
+              minor) minor=$((minor + 1)); patch=0 ;;
+              patch) patch=$((patch + 1)) ;;
+            esac
+            version="$major.$minor.$patch"
+          fi
+
+          case "$version" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::'$version' is not a version like 0.2.0"; exit 1 ;;
+          esac
+
           tag="v$version"
           if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match VERSION ($version)"
+            echo "::error::tag $GITHUB_REF_NAME does not match VERSION ($current)"
             exit 1
           fi
+
+          printf '%s\n' "$version" > VERSION
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "$current -> $version" >> "$GITHUB_STEP_SUMMARY"
+
+      - if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            if git diff --quiet VERSION; then
+              echo "$TAG already exists — rebuilding it."
+              exit 0
+            fi
+            echo "::error::$TAG already exists — pick another version"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet VERSION; then
+            git commit -m "release $TAG" VERSION
+            git push origin "HEAD:$GITHUB_REF_NAME"
+          fi
+          git tag "$TAG"
+          git push origin "$TAG"
 
       - env:
           GH_TOKEN: ${{ github.token }}
@@ -56,9 +115,11 @@ jobs:
             target: linux-amd64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.create-release.outputs.tag }}
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
@@ -86,7 +147,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: ./scripts/release.sh --publish
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: meerkat-${{ matrix.target }}
           path: meerkat-site/public/downloads/latest/

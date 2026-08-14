@@ -62,10 +62,20 @@ served it.
 
 ## Cutting a release
 
-Tagging is the whole flow. `.github/workflows/release.yml` runs on any `v*` tag,
-checks the tag against `VERSION`, opens the GitHub Release, then builds
-`darwin-arm64`, `darwin-amd64` and `linux-amd64` on their own runners and uploads
-each tarball with its `.sha256` beside it:
+Run the `release` workflow from the Actions tab and pick what to increment:
+patch, minor, major, or none. It reads `VERSION`, works out the next number,
+commits the bump, tags it, opens the GitHub Release, then builds `darwin-arm64`,
+`darwin-amd64` and `linux-amd64` on their own runners and uploads each tarball
+with its `.sha256` beside it. Nothing to remember and nothing to keep in sync —
+the version lives in `VERSION` and the tag is derived from it.
+
+```
+gh workflow run release -f bump=minor      # 0.1.0 -> 0.2.0
+gh workflow run release -f version=1.0.0   # or name it outright
+```
+
+Pushing a `v*` tag by hand runs the same workflow, minus the bump; it checks the
+tag against `VERSION` and refuses if they disagree.
 
 ```
 git tag v0.1.0 && git push origin v0.1.0

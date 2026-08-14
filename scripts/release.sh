@@ -14,17 +14,25 @@ VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
 OUT_DIR="$ROOT/meerkat-site/public/downloads/latest"
 
 BUILD_APP=1
+PUBLISH=0
 for arg in "$@"; do
   case "$arg" in
-    --no-app) BUILD_APP=0 ;;
+    --no-app)  BUILD_APP=0 ;;
+    --publish) PUBLISH=1 ;;
     -h|--help)
-      echo "usage: scripts/release.sh [--no-app]"
+      echo "usage: scripts/release.sh [--no-app] [--publish]"
       echo "  --no-app   skip the GUI (needs the wails CLI); ships the daemon and CLI only"
+      echo "  --publish  upload the tarball to the GitHub Release for v$VERSION (needs gh)"
       exit 0
       ;;
     *) echo "error: unknown argument '$arg'" >&2; exit 2 ;;
   esac
 done
+
+if [[ $PUBLISH -eq 1 ]] && ! command -v gh >/dev/null 2>&1; then
+  echo "error: --publish needs the 'gh' CLI on PATH (https://cli.github.com)." >&2
+  exit 1
+fi
 
 case "$(uname -s)" in
   Darwin) OS=darwin ;;
@@ -62,7 +70,7 @@ if [[ $BUILD_APP -eq 1 ]]; then
     exit 1
   fi
   step "Building the terminal app"
-  ( cd "$ROOT/meerkat-app" && wails build -clean )
+  ( cd "$ROOT/meerkat-app" && wails build -clean ${WAILS_TAGS:+-tags "$WAILS_TAGS"} )
   if [[ "$OS" == "darwin" ]]; then
     cp -R "$ROOT/meerkat-app/build/bin/meerkat-app.app" "$STAGE/Meerkat.app"
   else
@@ -78,12 +86,30 @@ step "Packaging $ASSET"
 mkdir -p "$OUT_DIR"
 tar -czf "$OUT_DIR/$ASSET" -C "$STAGE" .
 
-# One checksum file for every asset in the directory, rewritten each time so a
-# rebuilt tarball can never be checked against a stale digest.
-( cd "$OUT_DIR" && shasum -a 256 ./*.tar.gz > SHA256SUMS )
+if command -v shasum >/dev/null 2>&1; then
+  ( cd "$OUT_DIR" && shasum -a 256 "$ASSET" > "$ASSET.sha256" )
+else
+  ( cd "$OUT_DIR" && sha256sum "$ASSET" > "$ASSET.sha256" )
+fi
 
 printf '\n\033[1mDone.\033[0m %s (%s)\n' "$ASSET" "$(du -h "$OUT_DIR/$ASSET" | cut -f1)"
-echo
-echo "Serve it, then install from it:"
-echo "  cd meerkat-site && npm run dev"
-echo "  curl -fsSL http://localhost:5273/install.sh | sh"
+
+if [[ $PUBLISH -eq 1 ]]; then
+  TAG="v$VERSION"
+  step "Publishing to $TAG"
+  if ! gh release view "$TAG" >/dev/null 2>&1; then
+    gh release create "$TAG" --title "Meerkat $VERSION" --generate-notes
+  fi
+  gh release upload "$TAG" --clobber "$OUT_DIR/$ASSET" "$OUT_DIR/$ASSET.sha256"
+  echo "Uploaded $ASSET to $TAG."
+  echo
+  echo "Install it:"
+  echo "  curl -fsSL https://meerkat.com/install.sh | sh"
+else
+  echo
+  echo "Serve it locally, then install from it:"
+  echo "  cd meerkat-site && npm run dev"
+  echo "  curl -fsSL http://localhost:5273/install.sh | sh"
+  echo
+  echo "Or publish it to the GitHub Release: scripts/release.sh --publish"
+fi

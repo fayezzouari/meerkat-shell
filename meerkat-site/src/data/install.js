@@ -1,27 +1,37 @@
-// The install command the page shows is the one that works from wherever the
-// page is being served. The server bakes its own address into install.sh as it
-// serves it (see the plugin in vite.config.js), so the command is the same
-// shape everywhere — only the host changes.
+const FALLBACK_HOST = "meerkat.com";
+const CONFIGURED = typeof __MEERKAT_SITE_URL__ === "string" ? __MEERKAT_SITE_URL__ : "";
 
-const PRODUCTION_HOST = "meerkat.com";
+function isLocal(origin) {
+  try {
+    const { hostname } = new URL(origin);
+    return (
+      hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".local")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function installHost(origin = window.location.origin) {
+  if (isLocal(origin)) return origin;
+  if (CONFIGURED) {
+    try {
+      return new URL(CONFIGURED).host;
+    } catch {
+      return CONFIGURED;
+    }
+  }
+  try {
+    return new URL(origin).host;
+  } catch {
+    return FALLBACK_HOST;
+  }
+}
 
 export function installCommand(origin = window.location.origin) {
-  let host = PRODUCTION_HOST;
-  try {
-    const url = new URL(origin);
-    const local =
-      url.hostname === "localhost" ||
-      url.hostname === "127.0.0.1" ||
-      url.hostname.endsWith(".local");
-    // Production is shown bare, without scheme or port, because that is how
-    // people will type and remember it.
-    host = local ? `${url.origin}` : PRODUCTION_HOST;
-  } catch {
-    // Fall through to the production host.
-  }
-  return `curl -fsSL ${host}/install.sh | sh`;
+  return `curl -fsSL ${installHost(origin)}/install.sh | sh`;
 }
 
 export function isLocalInstall(origin = window.location.origin) {
-  return !installCommand(origin).includes(PRODUCTION_HOST);
+  return isLocal(origin);
 }

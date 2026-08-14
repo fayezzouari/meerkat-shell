@@ -2,8 +2,6 @@
 // means editing layout. Pitched at what Meerkat does, not how it is wired —
 // the deep detail lives in the repo's READMEs.
 
-export const INSTALL_CMD = "curl -fsSL meerkat.com/install.sh | sh";
-
 export const OPERATING_SYSTEMS = [
   {
     id: "macos",

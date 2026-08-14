@@ -98,7 +98,15 @@ editing layout. Backticked spans in those strings render as inline code via
 ## The installer
 
 `public/install.sh` is served at `<host>/install.sh`, and downloads a release
-tarball from `<host>/downloads/latest/`. Build that tarball first:
+tarball from its own `DEFAULT_DOWNLOAD_URL` — the GitHub Release, not this site.
+The two are deliberately separate: the page is a static deploy that rebuilds on
+every push, while the tarballs have to be built on the platform they target and
+are published as release assets. Nothing about deploying the page ships a binary.
+
+Locally that split disappears. Build a tarball and the dev server serves it, and
+rewrites the script's `DEFAULT_DOWNLOAD_URL` to its own address on the way out —
+see the `meerkat-installer-download-url` plugin in `vite.config.js` — so a real
+install over localhost needs no environment variables:
 
 ```
 ../scripts/release.sh          # or --no-app to skip the GUI
@@ -106,17 +114,29 @@ npm run dev
 curl -fsSL http://localhost:5273/install.sh | sh
 ```
 
-That works without naming the host twice because the server rewrites the
-script's `DEFAULT_BASE_URL` to its own address as it serves it — see the
-`meerkat-installer-base-url` plugin in `vite.config.js`. A production build
-leaves the script's own default (`meerkat.com`) unless `MEERKAT_SITE_URL` is set:
+`MEERKAT_DOWNLOAD_URL` and `MEERKAT_BASE_URL` override the baked-in value at
+install time — the first names an asset directory, the second a site serving one
+under `/downloads/latest`.
+
+## Deploying
+
+The page is a static Vite build with no server side, so any static host works;
+`vercel.json` sets the root's build command, output directory, and a shell
+content type for `/install.sh`. On Vercel, point the project's root directory at
+`meerkat-site`.
+
+Two build-time variables, neither required:
 
 ```
-MEERKAT_SITE_URL=https://meerkat.com npm run build
+MEERKAT_SITE_URL=https://meerkat.com     the domain the page tells people to curl
+MEERKAT_DOWNLOAD_URL=https://…/download  where install.sh fetches tarballs from
 ```
 
-`MEERKAT_BASE_URL` still overrides the baked-in value at install time, which is
-what to reach for when serving the page and the downloads from different hosts.
+`MEERKAT_SITE_URL` is the one that matters. Without it the page falls back to
+`VERCEL_PROJECT_PRODUCTION_URL`, then to whatever origin it is being viewed at,
+so a preview deploy prints a command that points at that preview. Set it once the
+real domain is live so every deploy names it instead. `MEERKAT_DOWNLOAD_URL` only
+needs setting if the assets move off GitHub Releases.
 
 What lands where, with `~/.meerkat` as the default prefix:
 
@@ -131,19 +151,23 @@ What lands where, with `~/.meerkat` as the default prefix:
 
 Both wrappers start the engine before connecting, rather than relying on the
 client's own spawn — a first cold start reads the whole OTP release off disk and
-can outlast the client's wait. Checksums are verified against
-`downloads/latest/SHA256SUMS`; a mismatch aborts. `sh -s -- --uninstall` reverses
-it, leaving your socket and logs alone.
+can outlast the client's wait. Checksums are verified against the `.sha256`
+published beside each tarball; a mismatch aborts. `sh -s -- --uninstall`
+reverses it, leaving your socket and logs alone.
 
 Releases are built per platform (the engine ships a compiled OTP release and
 erlexec builds a C++ port program), so a Linux tarball has to be built on Linux.
-`public/downloads/` is gitignored — regenerate it, don't commit it.
+That is what `.github/workflows/release.yml` does on a `v*` tag — see the root
+README. `public/downloads/` is gitignored: it is the local-serving path only, so
+regenerate it, don't commit it.
 
 ## Before this goes live
 
-- `meerkat.com` does not serve anything yet, so the command the page shows for
-  non-local hosts is still a placeholder and says so. Publishing means putting
-  `dist/` and a built `downloads/latest/` behind that domain, and building with
-  `MEERKAT_SITE_URL` set; the installer itself needs no change.
+- `meerkat.com` does not resolve yet. Until it does, set `MEERKAT_SITE_URL` to
+  whatever domain is real, or leave it unset and the page names its own origin.
+- The Linux tarball is built on Ubuntu 24.04, so its OTP release wants that
+  glibc or newer. Older distributions need a build of their own.
+- The macOS app is unsigned and unnotarized, so a first launch needs a
+  right-click → Open. Signing it means an Apple Developer ID in the workflow.
 - The type faces load from Google Fonts. Self-host them if the page needs to
   work offline.

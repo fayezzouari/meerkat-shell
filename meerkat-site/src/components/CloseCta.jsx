@@ -18,8 +18,8 @@ export default function CloseCta() {
             </>
           ) : (
             <>
-              macOS &middot; Linux &middot; Windows &nbsp;|&nbsp;{" "}
-              <span>placeholder URL — build from source for now</span>
+              macOS &middot; Linux &nbsp;|&nbsp;{" "}
+              <span>Windows: build from source</span>
             </>
           )
         }

@@ -30,7 +30,7 @@ export default function Hero() {
             ) : (
               <>
                 One command, then you have it.{" "}
-                <span>Nothing is published yet — this link is a placeholder.</span>
+                <span>Installs the latest release into ~/.meerkat.</span>
               </>
             )
           }

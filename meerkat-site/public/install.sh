@@ -3,39 +3,49 @@
 #
 #   curl -fsSL https://meerkat.com/install.sh | sh
 #
-# Downloading from somewhere else (a local dev server, a staging host) means
-# saying so, since a piped script cannot see the URL it was fetched from:
+# The page and the binaries live in different places: the page is a static
+# deploy, while the release tarballs are built per platform and published as
+# GitHub Release assets. So where this script downloads from is its own setting
+# rather than wherever the page happens to be — and a piped script cannot see
+# the URL it was fetched from anyway, so pointing it elsewhere means saying so:
 #
 #   curl -fsSL http://localhost:5273/install.sh | MEERKAT_BASE_URL=http://localhost:5273 sh
 #
 # Environment:
-#   MEERKAT_BASE_URL   where to fetch the release from (default https://meerkat.com)
-#   MEERKAT_PREFIX     where to install it (default $HOME/.meerkat)
+#   MEERKAT_DOWNLOAD_URL  directory holding the release assets
+#   MEERKAT_BASE_URL      a site serving them under /downloads/latest
+#   MEERKAT_PREFIX        where to install (default $HOME/.meerkat)
 #
 # Flags (after `sh -s --`):
-#   --base URL, --prefix DIR, --no-verify, --uninstall
+#   --downloads URL, --base URL, --prefix DIR, --no-verify, --uninstall
 set -eu
 
-DEFAULT_BASE_URL="https://meerkat.com"
-BASE_URL="${MEERKAT_BASE_URL:-$DEFAULT_BASE_URL}"
+DEFAULT_DOWNLOAD_URL="https://github.com/fayezzouari/meerkat-shell/releases/latest/download"
+
+if [ -n "${MEERKAT_BASE_URL:-}" ]; then
+  DOWNLOAD_URL="${MEERKAT_BASE_URL%/}/downloads/latest"
+else
+  DOWNLOAD_URL="${MEERKAT_DOWNLOAD_URL:-$DEFAULT_DOWNLOAD_URL}"
+fi
 PREFIX="${MEERKAT_PREFIX:-$HOME/.meerkat}"
 VERIFY=1
 UNINSTALL=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --base)      BASE_URL="${2:?--base needs a URL}"; shift 2 ;;
+    --downloads) DOWNLOAD_URL="${2:?--downloads needs a URL}"; shift 2 ;;
+    --base)      DOWNLOAD_URL="${2:?--base needs a URL}"; DOWNLOAD_URL="${DOWNLOAD_URL%/}/downloads/latest"; shift 2 ;;
     --prefix)    PREFIX="${2:?--prefix needs a directory}"; shift 2 ;;
     --no-verify) VERIFY=0; shift ;;
     --uninstall) UNINSTALL=1; shift ;;
     -h|--help)
-      sed -n '2,18p' "$0" 2>/dev/null || echo "see https://meerkat.com/install.sh"
+      sed -n '2,20p' "$0" 2>/dev/null || echo "see https://meerkat.com/install.sh"
       exit 0 ;;
     *) echo "error: unknown option '$1'" >&2; exit 2 ;;
   esac
 done
 
-BASE_URL="${BASE_URL%/}"
+DOWNLOAD_URL="${DOWNLOAD_URL%/}"
 BIN_DIR="$PREFIX/bin"
 VERSIONS_DIR="$PREFIX/versions"
 CURRENT="$PREFIX/current"
@@ -82,8 +92,8 @@ case "$(uname -m)" in
 esac
 
 ASSET="meerkat-${OS}-${ARCH}.tar.gz"
-ASSET_URL="$BASE_URL/downloads/latest/$ASSET"
-SUMS_URL="$BASE_URL/downloads/latest/SHA256SUMS"
+ASSET_URL="$DOWNLOAD_URL/$ASSET"
+SUM_URL="$ASSET_URL.sha256"
 
 have tar || die "tar is required but not installed"
 
@@ -114,8 +124,8 @@ fetch "$ASSET_URL" "$TMP/$ASSET" || die "could not download $ASSET_URL
 Is there a build for $OS/$ARCH at that address?"
 
 if [ "$VERIFY" -eq 1 ]; then
-  if fetch "$SUMS_URL" "$TMP/SHA256SUMS" 2>/dev/null; then
-    want="$(grep "$ASSET" "$TMP/SHA256SUMS" | cut -d' ' -f1 | head -1)"
+  if fetch "$SUM_URL" "$TMP/$ASSET.sha256" 2>/dev/null; then
+    want="$(cut -d' ' -f1 < "$TMP/$ASSET.sha256" | head -1)"
     got="$(sum256 "$TMP/$ASSET")"
     if [ -z "$got" ]; then
       say "${D}No sha256 tool found — skipping checksum.$R"
@@ -130,7 +140,7 @@ Refusing to install. Re-run to download again, or pass --no-verify to skip."
       say "Checksum verified."
     fi
   else
-    say "${D}No SHA256SUMS published — skipping checksum.$R"
+    say "${D}No checksum published for $ASSET — skipping.$R"
   fi
 fi
 

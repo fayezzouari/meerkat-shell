@@ -128,8 +128,8 @@ content type for `/install.sh`. On Vercel, point the project's root directory at
 Two build-time variables, neither required:
 
 ```
-MEERKAT_SITE_URL=https://meerkat.com     the domain the page tells people to curl
-MEERKAT_DOWNLOAD_URL=https://…/download  where install.sh fetches tarballs from
+MEERKAT_SITE_URL=https://meerkat.fayez-zouari.tn   the domain the page tells people to curl
+MEERKAT_DOWNLOAD_URL=https://…/download            where install.sh fetches tarballs from
 ```
 
 `MEERKAT_SITE_URL` is the one that matters. Without it the page falls back to
@@ -163,8 +163,9 @@ regenerate it, don't commit it.
 
 ## Before this goes live
 
-- `meerkat.com` does not resolve yet. Until it does, set `MEERKAT_SITE_URL` to
-  whatever domain is real, or leave it unset and the page names its own origin.
+- `meerkat.fayez-zouari.tn` has no DNS record yet, though the apex already points
+  at Vercel. Add the subdomain to the project, then set `MEERKAT_SITE_URL` to it;
+  until then, leave the variable unset and the page names its own origin.
 - The Linux tarball is built on Ubuntu 24.04, so its OTP release wants that
   glibc or newer. Older distributions need a build of their own.
 - The macOS app is unsigned and unnotarized, so a first launch needs a

@@ -43,16 +43,8 @@ same job table, because the state never lived in the client.
 
 ## Installing a build
 
-`scripts/release.sh` builds all three components for the machine it runs on and
-packages them into `meerkat-site/public/downloads/latest/`, which is where the
-site's `install.sh` looks. Serving the site is therefore enough to make a real
-one-line install work — the server bakes its own address into the script, so the
-command needs no environment variables:
-
 ```
-./scripts/release.sh                 # add --no-app to skip the GUI
-cd meerkat-site && npm run dev
-curl -fsSL http://localhost:5273/install.sh | sh
+curl -fsSL https://meerkat.fayez-zouari.tn/install.sh | sh
 ```
 
 That installs into `~/.meerkat` and leaves you with `meerkat` (the shell),
@@ -60,6 +52,35 @@ That installs into `~/.meerkat` and leaves you with `meerkat` (the shell),
 `~/.meerkat/bin`. See [`meerkat-site/README.md`](meerkat-site/README.md) for the
 layout it writes and how to uninstall. macOS and Linux only — on Windows, build
 from source as described above.
+
+The page and the binaries are published separately. The page is a static deploy
+of `meerkat-site`; the release tarballs are GitHub Release assets, because each
+one has to be built on the platform it targets — the daemon ships a compiled OTP
+release and erlexec builds a C++ port program, so nothing cross-compiles.
+`install.sh` therefore downloads from the release rather than from whatever host
+served it.
+
+## Cutting a release
+
+Tagging is the whole flow. `.github/workflows/release.yml` runs on any `v*` tag,
+checks the tag against `VERSION`, opens the GitHub Release, then builds
+`darwin-arm64`, `darwin-amd64` and `linux-amd64` on their own runners and uploads
+each tarball with its `.sha256` beside it:
+
+```
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+`scripts/release.sh` is what those runners call, and it works the same by hand —
+`--publish` uploads to the release for the current `VERSION`, and without it the
+tarball just lands in `meerkat-site/public/downloads/latest/`, where the dev
+server serves it for a real install over localhost:
+
+```
+./scripts/release.sh                 # add --no-app to skip the GUI
+cd meerkat-site && npm run dev
+curl -fsSL http://localhost:5273/install.sh | sh
+```
 
 ## Protocol
 

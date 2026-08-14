@@ -104,7 +104,7 @@ if [[ $PUBLISH -eq 1 ]]; then
   echo "Uploaded $ASSET to $TAG."
   echo
   echo "Install it:"
-  echo "  curl -fsSL https://meerkat.com/install.sh | sh"
+  echo "  curl -fsSL https://meerkat.fayez-zouari.tn/install.sh | sh"
 else
   echo
   echo "Serve it locally, then install from it:"

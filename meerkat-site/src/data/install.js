@@ -1,4 +1,4 @@
-const FALLBACK_HOST = "meerkat.com";
+const FALLBACK_HOST = "meerkat.fayez-zouari.tn";
 const CONFIGURED = typeof __MEERKAT_SITE_URL__ === "string" ? __MEERKAT_SITE_URL__ : "";
 
 function isLocal(origin) {

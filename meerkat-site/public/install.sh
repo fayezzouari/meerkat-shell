@@ -1,7 +1,7 @@
 #!/bin/sh
 # Meerkat installer.
 #
-#   curl -fsSL https://meerkat.com/install.sh | sh
+#   curl -fsSL https://meerkat.fayez-zouari.tn/install.sh | sh
 #
 # The page and the binaries live in different places: the page is a static
 # deploy, while the release tarballs are built per platform and published as
@@ -39,7 +39,7 @@ while [ $# -gt 0 ]; do
     --no-verify) VERIFY=0; shift ;;
     --uninstall) UNINSTALL=1; shift ;;
     -h|--help)
-      sed -n '2,20p' "$0" 2>/dev/null || echo "see https://meerkat.com/install.sh"
+      sed -n '2,20p' "$0" 2>/dev/null || echo "see https://meerkat.fayez-zouari.tn/install.sh"
       exit 0 ;;
     *) echo "error: unknown option '$1'" >&2; exit 2 ;;
   esac

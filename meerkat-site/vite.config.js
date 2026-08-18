@@ -4,10 +4,32 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 const INSTALLER = "public/install.sh";
-const DOWNLOAD_LINE = /^DEFAULT_DOWNLOAD_URL=.*$/m;
+const DOWNLOAD_LINE = /^DEFAULT_DOWNLOAD_URL="(.*)"$/m;
 
 const stripSlash = (url) => url.replace(/\/+$/, "");
 const withScheme = (host) => (/^https?:\/\//.test(host) ? host : `https://${host}`);
+
+// The version the page prints, read from the one file that owns it. Kept in step
+// with the tarballs by construction: scripts/release.sh reads the same file.
+function version() {
+  try {
+    return readFileSync(resolve(__dirname, "../VERSION"), "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+// Where the download buttons point. The installer's own default is the single
+// source of truth, so the two paths cannot drift onto different releases.
+function downloadUrl() {
+  if (process.env.MEERKAT_DOWNLOAD_URL) return stripSlash(process.env.MEERKAT_DOWNLOAD_URL);
+  try {
+    const match = readFileSync(resolve(__dirname, INSTALLER), "utf8").match(DOWNLOAD_LINE);
+    return match ? stripSlash(match[1]) : "";
+  } catch {
+    return "";
+  }
+}
 
 function siteUrl() {
   const configured =
@@ -49,6 +71,10 @@ function installerDownloadUrl() {
 export default defineConfig({
   plugins: [react(), installerDownloadUrl()],
   server: { port: 5273 },
-  define: { __MEERKAT_SITE_URL__: JSON.stringify(siteUrl()) },
+  define: {
+    __MEERKAT_SITE_URL__: JSON.stringify(siteUrl()),
+    __MEERKAT_VERSION__: JSON.stringify(version()),
+    __MEERKAT_DOWNLOAD_URL__: JSON.stringify(downloadUrl()),
+  },
   base: "./",
 });

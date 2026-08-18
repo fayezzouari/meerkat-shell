@@ -257,7 +257,26 @@ case "\${1:-status}" in
       running && { echo "Engine started."; exit 0; }
       i=\$((i + 1)); sleep 0.5
     done
-    echo "error: the engine did not come up. See \$(dirname "\$SOCK")/daemon.log" >&2
+    # daemon.log is the engine talking once it is up; a boot that never got
+    # that far leaves its reason in run_erl's log instead, which is where the
+    # answer to "it did not come up" actually is.
+    BOOTLOG="\$ROOT/engine/tmp/log/erlang.log.1"
+    echo "error: the engine did not come up." >&2
+    if [ -f "\$BOOTLOG" ] && grep -q "seems to be in use" "\$BOOTLOG" 2>/dev/null; then
+      # An engine from an earlier install, still holding the node name but no
+      # longer answering — the one failure a reinstall makes likelier, and the
+      # one the timeout above says nothing about.
+      echo "An engine from an earlier install is still running and holding the" >&2
+      echo "node name, but no longer answers. Stop it, then start again:" >&2
+      echo "  pkill -f 'meerkat/versions/.*beam.smp'" >&2
+      echo "  meerkat-engine start" >&2
+    else
+      if [ -f "\$BOOTLOG" ]; then
+        echo "--- last lines of \$BOOTLOG" >&2
+        tr -d '\\000' < "\$BOOTLOG" | tail -n 12 >&2
+      fi
+      echo "See also \$(dirname "\$SOCK")/daemon.log" >&2
+    fi
     exit 1 ;;
   stop)
     running || { echo "Not running."; exit 0; }

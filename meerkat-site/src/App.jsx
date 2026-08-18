@@ -15,11 +15,15 @@ import { useDaemonDemo } from "./hooks/useDaemonDemo.js";
 
 // The page is a cross-section of ground: .surface is daylight, .burrow is
 // below it, and GroundLine is the single crossing between them. The demo state
-// spans that crossing on purpose — the window sits above it, the engine below.
+// spans that crossing on purpose — the window sits above it, in the last band of
+// daylight, and the engine below.
 //
 // The branch joins the window to the engine's panel, so it cannot live inside
 // either section. It is a page-level overlay, last in the DOM so it paints over
 // both, positioned from the geometry it measures.
+//
+// The nav is page-level too, and for the same kind of reason: it is fixed over
+// both regions, so it cannot belong to either.
 export default function App() {
   const demo = useDaemonDemo();
 
@@ -32,10 +36,15 @@ export default function App() {
     <div className="page" ref={pageRef}>
       <a className="skip" href="#install">Skip to install</a>
 
+      <Nav groundRef={groundRef} />
+
       <div className="surface">
-        <Nav />
         <Hero />
-        <CrossingDemo demo={demo} windowRef={windowRef} />
+        {/* Last thing above ground, so the stem out of the window's underside has
+            only the soil left to cross. */}
+        <div className="container">
+          <CrossingDemo demo={demo} windowRef={windowRef} />
+        </div>
       </div>
 
       <GroundLine groundRef={groundRef} />

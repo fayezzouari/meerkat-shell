@@ -59,6 +59,10 @@ export default function Branch({ pageRef, windowRef, panelRef, groundRef, live, 
     const panel = panelRef.current;
     if (!page || !windowEl || !panel) return undefined;
 
+    // The measurement is re-run often; only publish it when it actually moved,
+    // so a re-measure that finds nothing new costs no render.
+    let last = "";
+
     const measure = () => {
       const pageBox = page.getBoundingClientRect();
       const win = windowEl.getBoundingClientRect();
@@ -100,7 +104,11 @@ export default function Branch({ pageRef, windowRef, panelRef, groundRef, live, 
       const crestY = ground ? ground.top - pageBox.top + ground.height * 0.33 - top : height;
       const crest = Math.min(0.98, Math.max(0.02, crestY / height));
 
-      setGeometry({ left, top, width, height, d, ax, tx, crest, crestY });
+      const next = { left, top, width, height, d, ax, tx, crest, crestY };
+      const stamp = JSON.stringify(next);
+      if (stamp === last) return;
+      last = stamp;
+      setGeometry(next);
     };
 
     measure();
@@ -108,7 +116,30 @@ export default function Branch({ pageRef, windowRef, panelRef, groundRef, live, 
     observer.observe(page);
     observer.observe(windowEl);
     observer.observe(panel);
-    return () => observer.disconnect();
+
+    // A ResizeObserver reports size, not position, and the first measurement
+    // happens on fallback font metrics. The web faces load with `display: swap`,
+    // so when they land the text reflows and both boxes slide a few pixels down
+    // the page — while every box the observer watches keeps its size, because
+    // the sections around them are sized by min-height rather than by content.
+    // Nothing fires, and the stem stays anchored to the pre-swap layout: short
+    // of the panel at one end, adrift of the window at the other. Measure again
+    // once the faces are in.
+    //   https://developer.mozilla.org/en-US/docs/Web/API/FontFaceSet/ready
+    let dropped = false;
+    const remeasure = () => {
+      if (!dropped) measure();
+    };
+    document.fonts?.ready.then(remeasure);
+    document.fonts?.addEventListener("loadingdone", remeasure);
+    window.addEventListener("resize", remeasure);
+
+    return () => {
+      dropped = true;
+      observer.disconnect();
+      document.fonts?.removeEventListener("loadingdone", remeasure);
+      window.removeEventListener("resize", remeasure);
+    };
   }, [groundRef, pageRef, panelRef, windowRef]);
 
   // Place the sprigs once the path is in the DOM, and let the soil line decide

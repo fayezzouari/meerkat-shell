@@ -11,7 +11,7 @@ export default function CrossingDemo({ demo, windowRef }) {
   const next = steps[step];
 
   return (
-    <section className="crossing container" aria-labelledby="crossing-h">
+    <section className="crossing" aria-labelledby="crossing-h">
       <h2 id="crossing-h" className="sr">
         Try it: start a job, close the window, open a new one
       </h2>

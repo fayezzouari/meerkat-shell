@@ -4,7 +4,7 @@ import Section from "./Section.jsx";
 
 export default function Limits() {
   return (
-    <Section label="Not there yet" title="Two things to know first" className="limits">
+    <Section id="limits" label="Not there yet" title="Two things to know first" className="limits">
       <div className="limit-grid">
         {LIMITS.map((limit, i) => (
           <article key={limit.title} style={{ "--i": i }}>

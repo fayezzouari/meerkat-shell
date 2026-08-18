@@ -143,8 +143,54 @@ jobs:
           go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
+      # Gatekeeper refuses unsigned, un-notarized code that arrives with a
+      # browser's quarantine flag on it, which is every .dmg anyone downloads.
+      # So the macOS runners need a Developer ID certificate in a keychain
+      # before the build, or the disk image they produce cannot be opened.
+      #
+      # With the secrets unset this is a no-op and release.sh still ships an
+      # unsigned .dmg — fine for a fork or a dry run, not fine to publish.
+      - if: runner.os == 'macOS'
+        env:
+          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: |
+          if [ -z "$CERTIFICATE" ] || [ -z "$SIGN_IDENTITY" ]; then
+            echo "::warning::No signing certificate — the .dmg will be unsigned and macOS will refuse to open it."
+            exit 0
+          fi
+
+          # A keychain of its own, unlocked for this job only. The runner is
+          # ephemeral, so the password only has to be unguessable within the run.
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          echo "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" \
+            -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/certificate.p12"
+
+          # Without this codesign stops for a GUI prompt that nothing on a
+          # runner can answer, and the job hangs until it times out.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+
+          # Prepended, not replaced: the login keychain still holds Apple's
+          # intermediate certificates, and dropping it breaks chain validation.
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+
+          echo "MEERKAT_SIGN_IDENTITY=$SIGN_IDENTITY" >> "$GITHUB_ENV"
+
       - env:
           GH_TOKEN: ${{ github.token }}
+          MEERKAT_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MEERKAT_APPLE_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+          MEERKAT_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
         run: ./scripts/release.sh --publish
 
       - uses: actions/upload-artifact@v5

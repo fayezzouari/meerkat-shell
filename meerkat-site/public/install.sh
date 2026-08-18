@@ -11,13 +11,21 @@
 #
 #   curl -fsSL http://localhost:5273/install.sh | MEERKAT_BASE_URL=http://localhost:5273 sh
 #
+# A copy of this script also travels inside every release tarball, so an archive
+# someone downloaded by hand can install itself with no network at all:
+#
+#   tar -xzf meerkat-linux-amd64.tar.gz -C meerkat && ./meerkat/install.sh
+#
+# Run from beside an unpacked release it uses what is there; run from anywhere
+# else, or piped from curl, it downloads. That is the same install either way.
+#
 # Environment:
 #   MEERKAT_DOWNLOAD_URL  directory holding the release assets
 #   MEERKAT_BASE_URL      a site serving them under /downloads/latest
 #   MEERKAT_PREFIX        where to install (default $HOME/.meerkat)
 #
 # Flags (after `sh -s --`):
-#   --downloads URL, --base URL, --prefix DIR, --no-verify, --uninstall
+#   --downloads URL, --base URL, --from DIR, --prefix DIR, --no-verify, --uninstall
 set -eu
 
 DEFAULT_DOWNLOAD_URL="https://github.com/fayezzouari/meerkat-shell/releases/latest/download"
@@ -31,15 +39,25 @@ PREFIX="${MEERKAT_PREFIX:-$HOME/.meerkat}"
 VERIFY=1
 UNINSTALL=0
 
+# An unpacked release beside this script is the one it should install, without
+# asking the network for a copy of what is already on disk. Guarded on
+# meerkat-cli being there, because $0 is "sh" when this arrives through a pipe
+# and its directory is then wherever the shell happens to be.
+FROM="${MEERKAT_FROM:-}"
+if [ -z "$FROM" ] && [ -f "$(dirname -- "$0")/meerkat-cli" ]; then
+  FROM="$(cd "$(dirname -- "$0")" && pwd)"
+fi
+
 while [ $# -gt 0 ]; do
   case "$1" in
-    --downloads) DOWNLOAD_URL="${2:?--downloads needs a URL}"; shift 2 ;;
-    --base)      DOWNLOAD_URL="${2:?--base needs a URL}"; DOWNLOAD_URL="${DOWNLOAD_URL%/}/downloads/latest"; shift 2 ;;
+    --downloads) DOWNLOAD_URL="${2:?--downloads needs a URL}"; FROM=""; shift 2 ;;
+    --base)      DOWNLOAD_URL="${2:?--base needs a URL}"; DOWNLOAD_URL="${DOWNLOAD_URL%/}/downloads/latest"; FROM=""; shift 2 ;;
+    --from)      FROM="${2:?--from needs a directory}"; shift 2 ;;
     --prefix)    PREFIX="${2:?--prefix needs a directory}"; shift 2 ;;
     --no-verify) VERIFY=0; shift ;;
     --uninstall) UNINSTALL=1; shift ;;
     -h|--help)
-      sed -n '2,20p' "$0" 2>/dev/null || echo "see https://meerkat.fayez-zouari.tn/install.sh"
+      sed -n '2,28p' "$0" 2>/dev/null || echo "see https://meerkat.fayez-zouari.tn/install.sh"
       exit 0 ;;
     *) echo "error: unknown option '$1'" >&2; exit 2 ;;
   esac
@@ -95,7 +113,13 @@ ASSET="meerkat-${OS}-${ARCH}.tar.gz"
 ASSET_URL="$DOWNLOAD_URL/$ASSET"
 SUM_URL="$ASSET_URL.sha256"
 
-have tar || die "tar is required but not installed"
+if [ -n "$FROM" ]; then
+  [ -d "$FROM" ] || die "no such directory: $FROM"
+  [ -x "$FROM/meerkat-cli" ] || die "$FROM does not look like an unpacked Meerkat release
+It should contain meerkat-cli and an engine/ directory."
+else
+  have tar || die "tar is required but not installed"
+fi
 
 if have curl; then
   fetch() { curl -fsSL "$1" -o "$2"; }
@@ -113,43 +137,51 @@ else
   sum256() { echo ""; }
 fi
 
-# ── download ─────────────────────────────────────────────────────────
+# ── the release to install ───────────────────────────────────────────
+# Either an unpacked one already on disk, or one fetched now. Both end at SRC,
+# a directory holding meerkat-cli, engine/, and whatever app this platform has.
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT INT TERM
 
-step "Downloading $ASSET"
-say "${D}from $ASSET_URL$R"
-fetch "$ASSET_URL" "$TMP/$ASSET" || die "could not download $ASSET_URL
+if [ -n "$FROM" ]; then
+  step "Installing from $FROM"
+  SRC="$FROM"
+else
+  step "Downloading $ASSET"
+  say "${D}from $ASSET_URL$R"
+  fetch "$ASSET_URL" "$TMP/$ASSET" || die "could not download $ASSET_URL
 Is there a build for $OS/$ARCH at that address?"
 
-if [ "$VERIFY" -eq 1 ]; then
-  if fetch "$SUM_URL" "$TMP/$ASSET.sha256" 2>/dev/null; then
-    want="$(cut -d' ' -f1 < "$TMP/$ASSET.sha256" | head -1)"
-    got="$(sum256 "$TMP/$ASSET")"
-    if [ -z "$got" ]; then
-      say "${D}No sha256 tool found — skipping checksum.$R"
-    elif [ -z "$want" ]; then
-      say "${D}No checksum listed for $ASSET — skipping.$R"
-    elif [ "$want" != "$got" ]; then
-      die "checksum mismatch for $ASSET
+  if [ "$VERIFY" -eq 1 ]; then
+    if fetch "$SUM_URL" "$TMP/$ASSET.sha256" 2>/dev/null; then
+      want="$(cut -d' ' -f1 < "$TMP/$ASSET.sha256" | head -1)"
+      got="$(sum256 "$TMP/$ASSET")"
+      if [ -z "$got" ]; then
+        say "${D}No sha256 tool found — skipping checksum.$R"
+      elif [ -z "$want" ]; then
+        say "${D}No checksum listed for $ASSET — skipping.$R"
+      elif [ "$want" != "$got" ]; then
+        die "checksum mismatch for $ASSET
   expected $want
   got      $got
 Refusing to install. Re-run to download again, or pass --no-verify to skip."
+      else
+        say "Checksum verified."
+      fi
     else
-      say "Checksum verified."
+      say "${D}No checksum published for $ASSET — skipping.$R"
     fi
-  else
-    say "${D}No checksum published for $ASSET — skipping.$R"
   fi
+
+  step "Unpacking"
+  mkdir -p "$TMP/unpacked"
+  tar -xzf "$TMP/$ASSET" -C "$TMP/unpacked"
+  [ -x "$TMP/unpacked/meerkat-cli" ] || die "the archive is missing meerkat-cli — it may be corrupt"
+  SRC="$TMP/unpacked"
 fi
 
-step "Unpacking"
-mkdir -p "$TMP/unpacked"
-tar -xzf "$TMP/$ASSET" -C "$TMP/unpacked"
-[ -x "$TMP/unpacked/meerkat-cli" ] || die "the archive is missing meerkat-cli — it may be corrupt"
-
-VERSION="$(cat "$TMP/unpacked/VERSION" 2>/dev/null || echo unknown)"
+VERSION="$(cat "$SRC/VERSION" 2>/dev/null || echo unknown)"
 TARGET="$VERSIONS_DIR/$VERSION"
 
 # ── install ──────────────────────────────────────────────────────────
@@ -159,8 +191,16 @@ mkdir -p "$VERSIONS_DIR" "$BIN_DIR"
 
 # Replace an existing copy of this version rather than merging into it, so a
 # file dropped from a later build cannot linger.
+#
+# Copied, not moved, when installing from a directory the caller owns: --from
+# points at a release someone unpacked themselves, and moving it out from under
+# them would be a surprising thing for an installer to do.
 rm -rf "$TARGET"
-mv "$TMP/unpacked" "$TARGET"
+if [ -n "$FROM" ]; then
+  cp -R "$SRC" "$TARGET"
+else
+  mv "$SRC" "$TARGET"
+fi
 
 # `current` is what the wrappers point at, so upgrading is one symlink swap.
 rm -rf "$CURRENT"

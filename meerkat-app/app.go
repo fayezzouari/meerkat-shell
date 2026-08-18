@@ -42,6 +42,17 @@ func (a *App) startup(ctx context.Context) {
 	// grants the window native-fullscreen capability; this drops straight
 	// back to windowed while keeping it.
 	runtime.WindowUnfullscreen(ctx)
+
+	// A copy that carries its own engine came from a .dmg or from the
+	// installer, not from a checkout — so it is the kind of copy that should
+	// offer to wire up the command line. In a dev build there is no bundled
+	// engine and this does nothing, which is what you want while working.
+	//
+	// On its own goroutine: MessageDialog is modal, and blocking startup means
+	// blocking the window that dialog is supposed to appear over.
+	if engine := bundledEngine(); engine != "" {
+		go a.offerCLIInstall(engine)
+	}
 }
 
 type SessionInfo struct {

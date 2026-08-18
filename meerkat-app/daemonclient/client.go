@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -47,16 +48,68 @@ func SocketPath() string {
 	return filepath.Join(u.HomeDir, ".meerkat", "meerkat.sock")
 }
 
+// BundledEngine returns the path to an engine shipped alongside this binary, or
+// "" when there is none.
+//
+// A .dmg can only hand over one thing, so the app it contains has to carry the
+// engine inside itself — there is no installer alongside it to lay one down.
+// Launching a macOS bundle from the Finder also gives it none of the shell's
+// environment, so MEERKAT_START_CMD is not there to read: the app has to be able
+// to find its own engine from its own location on disk.
+func BundledEngine() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	// Symlinks are the normal case: the installer points ~/Applications at the
+	// copy under ~/.meerkat/versions, and resolving is what makes the engine
+	// path come out beside the real bundle rather than beside the link.
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	dir := filepath.Dir(exe)
+
+	candidates := []string{
+		// macOS: Contents/MacOS/meerkat-app -> Contents/Resources/engine
+		filepath.Join(dir, "..", "Resources", "engine", "bin", "meerkat_daemon"),
+		// Linux, and the tarball layout, where the engine sits beside the binary
+		filepath.Join(dir, "engine", "bin", "meerkat_daemon"),
+	}
+	for _, candidate := range candidates {
+		path, err := filepath.Abs(candidate)
+		if err != nil {
+			continue
+		}
+		if info, err := os.Stat(path); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
+			return path
+		}
+	}
+	return ""
+}
+
 func startCmd() (string, string) {
-	cmd := os.Getenv("MEERKAT_START_CMD")
-	if cmd == "" {
-		cmd = "mix run --no-halt"
+	if cmd := os.Getenv("MEERKAT_START_CMD"); cmd != "" {
+		return cmd, startDir()
 	}
-	dir := os.Getenv("MEERKAT_DIR")
-	if dir == "" {
-		dir = "."
+	// A bundled engine beats the development fallback: `mix run` only works from
+	// a checkout, which is exactly what an installed copy is not.
+	if engine := BundledEngine(); engine != "" {
+		return quote(engine) + " daemon", startDir()
 	}
-	return cmd, dir
+	return "mix run --no-halt", startDir()
+}
+
+func startDir() string {
+	if dir := os.Getenv("MEERKAT_DIR"); dir != "" {
+		return dir
+	}
+	return "."
+}
+
+// The command goes through `sh -c`, and an application bundle can sit under a
+// path with spaces in it.
+func quote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func dial(path string) (net.Conn, error) {

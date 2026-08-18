@@ -308,24 +308,44 @@ export function createSidebar(sessionManager) {
     refresh({ force: true });
   }
 
+  // Everything below the pane list crosses the webview bridge into Go, and a
+  // call that goes quiet there used to take the whole panel with it: the render
+  // waited on all three, so one slow answer left an empty box with no heading,
+  // no rows and nothing to explain itself. Nothing that arrives late is allowed
+  // to hold up what is already known.
+  const REMOTE_TIMEOUT_MS = 4000;
+
+  function within(promise, ms) {
+    return Promise.race([
+      Promise.resolve(promise),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("timed out")), ms)),
+    ]);
+  }
+
   async function refresh({ force = false } = {}) {
     if (!visible) return;
     // A poll tick must not blow away a focused input or a pending confirm.
     if (interacting() && !force) return;
 
+    // The panes are this side's own state, so they paint now. The remote
+    // sections keep whatever they last held until their answers land.
+    render(sessionManager.list(), lastJobs);
+
     const cwd = sessionManager.activeCwd();
-    const [jobs, sessions, status] = await Promise.all([
-      daemon.listJobs().catch(() => []),
-      sessionManager.list(),
-      worktrees.repoStatus(cwd).catch((err) => {
+    const [jobs, status] = await Promise.all([
+      within(daemon.listJobs(), REMOTE_TIMEOUT_MS).catch(() => lastJobs),
+      within(worktrees.repoStatus(cwd), REMOTE_TIMEOUT_MS).catch((err) => {
         worktreeError = errorText(err);
         return null;
       }),
     ]);
-    if (status) repo = status;
+    if (status) {
+      repo = status;
+      worktreeError = "";
+    }
     // A live view, not a history: "done" jobs just pile up.
     const activeJobs = jobs.filter((j) => j.status === "running" || j.status === "stopped");
-    render(sessions, activeJobs);
+    render(sessionManager.list(), activeJobs);
   }
 
   function open() {

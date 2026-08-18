@@ -22,6 +22,13 @@ import (
 // goroutines for the life of the app.
 const gitTimeout = 60 * time.Second
 
+// gitQueryTimeout bounds the read-only calls the sidebar makes on its 2s poll.
+// They are listings and status checks against a checkout that is already on
+// disk, so a slow one is a stuck one — and the panel waiting a full minute for
+// an answer is indistinguishable, to the person looking at it, from a panel
+// that does not work.
+const gitQueryTimeout = 5 * time.Second
+
 // defaultWorktreeDir is the template used when the user hasn't set one:
 // a sibling directory next to the repo, so worktrees never appear as
 // untracked paths inside the working tree.
@@ -34,9 +41,9 @@ const maxWorktreesScanned = 32
 type WorktreeInfo struct {
 	Path     string `json:"path"`
 	Name     string `json:"name"`
-	Branch   string `json:"branch"`   // short name, or "" when detached
-	Head     string `json:"head"`     // abbreviated commit
-	IsMain   bool   `json:"isMain"`   // the repo's original working tree
+	Branch   string `json:"branch"` // short name, or "" when detached
+	Head     string `json:"head"`   // abbreviated commit
+	IsMain   bool   `json:"isMain"` // the repo's original working tree
 	Detached bool   `json:"detached"`
 	Locked   bool   `json:"locked"`
 	Prunable bool   `json:"prunable"` // git considers the entry stale
@@ -55,7 +62,16 @@ type RepoStatus struct {
 }
 
 func git(dir string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	return gitWithin(dir, gitTimeout, args...)
+}
+
+// gitQuery is git for the read-only calls, on the shorter bound.
+func gitQuery(dir string, args ...string) (string, error) {
+	return gitWithin(dir, gitQueryTimeout, args...)
+}
+
+func gitWithin(dir string, timeout time.Duration, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "git", args...)
@@ -90,12 +106,12 @@ func (a *App) RepoStatus(cwd string, dirTemplate string) (RepoStatus, error) {
 		return RepoStatus{}, nil
 	}
 
-	out, err := git(cwd, "worktree", "list", "--porcelain")
+	out, err := gitQuery(cwd, "worktree", "list", "--porcelain")
 	if err != nil {
 		// The overwhelmingly common cause is "not a git repository", which is
 		// not an error condition for a terminal pane. Distinguish it from a
 		// real git failure by asking directly.
-		if _, e := git(cwd, "rev-parse", "--is-inside-work-tree"); e != nil {
+		if _, e := gitQuery(cwd, "rev-parse", "--is-inside-work-tree"); e != nil {
 			return RepoStatus{}, nil
 		}
 		return RepoStatus{}, err
@@ -128,9 +144,9 @@ func (a *App) RepoStatus(cwd string, dirTemplate string) (RepoStatus, error) {
 // if cwd isn't in a repo. Cheaper than RepoStatus for the mutating calls,
 // which don't need every worktree's dirty status.
 func mainWorktreeRoot(cwd string) (string, error) {
-	out, err := git(cwd, "worktree", "list", "--porcelain")
+	out, err := gitQuery(cwd, "worktree", "list", "--porcelain")
 	if err != nil {
-		if _, e := git(cwd, "rev-parse", "--is-inside-work-tree"); e != nil {
+		if _, e := gitQuery(cwd, "rev-parse", "--is-inside-work-tree"); e != nil {
 			return "", nil
 		}
 		return "", err
@@ -208,7 +224,7 @@ func fillDirtyStatus(worktrees []WorktreeInfo) {
 				w.Missing = true
 				return
 			}
-			out, err := git(w.Path, "status", "--porcelain")
+			out, err := gitQuery(w.Path, "status", "--porcelain")
 			if err != nil {
 				return
 			}
@@ -299,7 +315,7 @@ func (a *App) CreateWorktree(cwd string, name string, dirTemplate string) (strin
 	// Run from the main worktree: cwd may itself be a worktree that's about to
 	// be operated on, and git resolves relative paths against it either way.
 	branchExists := false
-	if _, err := git(root, "rev-parse", "--verify", "--quiet", "refs/heads/"+name); err == nil {
+	if _, err := gitQuery(root, "rev-parse", "--verify", "--quiet", "refs/heads/"+name); err == nil {
 		branchExists = true
 	}
 

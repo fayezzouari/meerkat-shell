@@ -15,8 +15,21 @@ defmodule MeerkatDaemon.JobManager do
   def new_job(cmd_string), do: GenServer.call(__MODULE__, {:new_job, cmd_string})
   def set_handle(id, pid, os_pid), do: GenServer.cast(__MODULE__, {:set_handle, id, pid, os_pid})
   def set_status(id, status), do: GenServer.cast(__MODULE__, {:set_status, id, status})
-  def append_output(id, tag, text), do: GenServer.cast(__MODULE__, {:append_output, id, tag, text})
+
+  def append_output(id, tag, text),
+    do: GenServer.cast(__MODULE__, {:append_output, id, tag, text})
+
   def finish_job(id, exit_code), do: GenServer.cast(__MODULE__, {:finish_job, id, exit_code})
+
+  @doc """
+  Marks a job as outliving the connection that started it.
+
+  Set when a client disconnects and its foreground job is left running (see
+  `MeerkatDaemon.Connection.terminate/2`). Nothing about the job changes — it is
+  a label, so `jobs` can say the thing on :8000 has no window behind it any more
+  and a frontend can offer to kill it.
+  """
+  def detach(id), do: GenServer.cast(__MODULE__, {:detach, id})
 
   def get_job(id) do
     case :ets.lookup(@table, id) do
@@ -86,6 +99,7 @@ defmodule MeerkatDaemon.JobManager do
       pid: nil,
       os_pid: nil,
       exit_code: nil,
+      detached: false,
       output: []
     }
 
@@ -101,6 +115,11 @@ defmodule MeerkatDaemon.JobManager do
   @impl true
   def handle_cast({:set_handle, id, pid, os_pid}, state) do
     update(id, &(&1 |> Map.put(:pid, pid) |> Map.put(:os_pid, os_pid)))
+    {:noreply, state}
+  end
+
+  def handle_cast({:detach, id}, state) do
+    update(id, &Map.put(&1, :detached, true))
     {:noreply, state}
   end
 

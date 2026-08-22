@@ -332,6 +332,36 @@
         align-items: baseline;
         gap: 6px;
       }
+      /* The port a job is serving on: the one thing about a running server
+         worth reading before its command line. */
+      .job-port {
+        flex: 0 0 auto;
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--accent);
+        background: var(--bg-hover);
+        border-radius: 3px;
+        padding: 1px 4px;
+      }
+      /* "no window" — same shape as a worktree tag, since it reads the same way:
+         a small fact about the row it sits in. */
+      .job-tag {
+        flex: 0 0 auto;
+        font-size: 9.5px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        background: var(--bg-hover);
+        border-radius: 3px;
+        padding: 1px 4px;
+      }
+      /* Always visible, unlike the worktree remove: a job whose pane is gone
+         has nowhere else to be stopped from, so the button should not be
+         something you have to find. */
+      .job-kill {
+        margin-left: auto;
+        flex: 0 0 auto;
+      }
       .sidebar-job .job-cmd {
         display: block;
         margin-top: 2px;
@@ -405,14 +435,24 @@
       }
 
       /* Minimal inset: padding here is dead space the terminal grid can't
-         use, and more of it reads as a frame. */
+         use, and more of it reads as a frame.
+         content-box, not border-box, is what makes that inset honest. FitAddon
+         sizes the grid from getComputedStyle(pane).height, and under border-box
+         that value is the border-box height — the padding included. It would fit
+         a grid to space the padding had already taken, and the top inset then
+         pushed the last row that far past the bottom edge: measured at 4-6px of
+         the final row cut off, at every window height leaving less than 6px over
+         after the rows divide. Under content-box the same property resolves to
+         the content height, so the grid is fitted to the room it actually has,
+         and the bottom padding is real clearance rather than a number nothing
+         reads. */
       .pane {
         flex: 1 1 0;
         min-width: 0;
         min-height: 0;
         position: relative;
-        padding: 6px 0 0 10px;
-        box-sizing: border-box;
+        padding: 6px 0 6px 10px;
+        box-sizing: content-box;
       }
       /* Shown in place of a terminal when the daemon can't be reached. */
       .pane-error {

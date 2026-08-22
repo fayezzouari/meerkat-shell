@@ -54,6 +54,12 @@ export function killJob(id) {
   return window.go.main.App.KillJob(id);
 }
 
+// By job id, not session id: the sidebar kills jobs whose pane may be gone.
+// Resolves to "" on success, or the daemon's refusal.
+export function killJobById(jobId) {
+  return window.go.main.App.KillJobById(jobId);
+}
+
 // Jobs are daemon-wide, not per-session.
 export function listJobs() {
   return window.go.main.App.ListJobs();

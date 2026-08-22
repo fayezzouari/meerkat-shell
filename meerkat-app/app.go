@@ -178,6 +178,44 @@ func (a *App) KillJob(id string) string {
 	return ""
 }
 
+// KillJobById kills a job by its id in the daemon's job table, over a
+// connection of its own.
+//
+// KillJob above is a different thing despite the name: it sends "K" down one
+// pane's socket, which the daemon reads as "whatever is in the foreground of
+// this connection". The sidebar needs neither of those — the job it offers to
+// kill may be one whose pane is already closed, which is precisely when it is
+// the only way to end it.
+func (a *App) KillJobById(jobId int) string {
+	client, err := daemonclient.ConnectExisting()
+	if err != nil {
+		return err.Error()
+	}
+	defer client.Close()
+
+	client.ReadFrame() // discard the initial "D:<cwd>" banner
+
+	if err := client.SendLine(fmt.Sprintf("kill %d", jobId)); err != nil {
+		return err.Error()
+	}
+
+	// Read to the "X" so the caller's refresh sees a table that has already
+	// changed, and so a refusal ("[7] has no live handle") is reported rather
+	// than silently dropped.
+	for {
+		msgType, payload, ok := client.ReadFrame()
+		if !ok {
+			return ""
+		}
+		switch msgType {
+		case daemonclient.MsgStderr:
+			return string(payload)
+		case daemonclient.MsgExit:
+			return ""
+		}
+	}
+}
+
 func (a *App) SendResize(id string, rows int, cols int) string {
 	client := a.client(id)
 	if client == nil {
@@ -190,12 +228,19 @@ func (a *App) SendResize(id string, rows int, cols int) string {
 }
 
 // JobInfo is one row of `jobs` output, structured for the jobs overlay.
+//
+// Ports and Detached come from the daemon, which is where a listening socket is
+// looked up (MeerkatDaemon.Ports) — it needs the answer itself, to decide
+// whether a job outlives the pane that started it. Memory is measured here
+// instead: nothing in the daemon acts on it.
 type JobInfo struct {
 	Id       int    `json:"id"`
 	Status   string `json:"status"`
 	Cmd      string `json:"cmd"`
 	ExitCode *int   `json:"exitCode"`
 	MemoryKB *int   `json:"memoryKB"`
+	Ports    []int  `json:"ports"`
+	Detached bool   `json:"detached"`
 	osPid    int
 	hasOsPid bool
 }
@@ -238,7 +283,12 @@ func (a *App) ListJobs() ([]JobInfo, error) {
 }
 
 // parseJobLine parses one line of the `jobs` builtin's output:
-// "[<id>] <status>[ (exit <code>)]\t<cmd>\t<os_pid>" — see evaluator.ex.
+//
+//	"[<id>] <status>[ (exit <code>)]\t<cmd>\t<os_pid>\t<ports>\t<flags>"
+//
+// See evaluator.ex. Every field after the command is optional, so an older
+// daemon — one that stops at the os_pid, or at the command — still parses; the
+// fields it didn't send simply come back zero.
 func parseJobLine(line string) (JobInfo, bool) {
 	if !strings.HasPrefix(line, "[") {
 		return JobInfo{}, false
@@ -259,26 +309,46 @@ func parseJobLine(line string) (JobInfo, bool) {
 	}
 	status := rest[:firstTab]
 
-	cmd := rest[firstTab+1:]
-	osPid, hasOsPid := 0, false
-	if secondTab := strings.IndexByte(cmd, '\t'); secondTab >= 0 {
-		osPidStr := cmd[secondTab+1:]
-		cmd = cmd[:secondTab]
-		if p, err := strconv.Atoi(osPidStr); err == nil {
-			osPid, hasOsPid = p, true
+	fields := strings.Split(rest[firstTab+1:], "\t")
+	job := JobInfo{Id: id, Status: status, Cmd: fields[0]}
+
+	if len(fields) > 1 {
+		if p, err := strconv.Atoi(fields[1]); err == nil {
+			job.osPid, job.hasOsPid = p, true
 		}
 	}
+	if len(fields) > 2 {
+		job.Ports = parsePortList(fields[2])
+	}
+	if len(fields) > 3 {
+		job.Detached = fields[3] == "detached"
+	}
 
-	var exitCode *int
 	if i := strings.Index(status, " (exit "); i >= 0 {
 		codeStr := strings.TrimSuffix(status[i+len(" (exit "):], ")")
 		if code, err := strconv.Atoi(codeStr); err == nil {
-			exitCode = &code
+			job.ExitCode = &code
 		}
-		status = status[:i]
+		job.Status = status[:i]
 	}
 
-	return JobInfo{Id: id, Status: status, Cmd: cmd, ExitCode: exitCode, osPid: osPid, hasOsPid: hasOsPid}, true
+	return job, true
+}
+
+// parsePortList reads the daemon's comma-separated port field. Returns nil for
+// an empty field so the frontend gets `null` rather than `[]` — one shape for
+// "no ports", whichever daemon answered.
+func parsePortList(field string) []int {
+	if field == "" {
+		return nil
+	}
+	var ports []int
+	for _, part := range strings.Split(field, ",") {
+		if port, err := strconv.Atoi(part); err == nil {
+			ports = append(ports, port)
+		}
+	}
+	return ports
 }
 
 // processTreeRSSKB sums RSS (in KB) for osPid and every descendant. Walks the

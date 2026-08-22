@@ -19,7 +19,7 @@ defmodule MeerkatDaemon.Evaluator do
   redirecting erlexec's message target mid-flight.
   """
 
-  alias MeerkatDaemon.JobManager
+  alias MeerkatDaemon.{JobManager, Ports}
 
   @type emit :: (:stdout | :stderr, String.t() -> :ok)
   @type winsz :: {rows :: non_neg_integer(), cols :: non_neg_integer()}
@@ -54,17 +54,28 @@ defmodule MeerkatDaemon.Evaluator do
     end
   end
 
+  # Tab-separated after the status, because everything a frontend wants about a
+  # job it cannot see arrives on this one line: os_pid so meerkat-app can measure
+  # the process, the listening ports so a server can be recognised as the thing
+  # holding :8000, and `detached` for a job whose window is already gone. Ports
+  # are asked for in one batch — see MeerkatDaemon.Ports.
   defp builtin("jobs", _args, cwd, emit) do
     case JobManager.list_jobs() do
       [] ->
         emit.(:stdout, "no jobs")
 
       jobs ->
+        ports = job_ports(jobs)
+
         Enum.each(jobs, fn {id, job} ->
           suffix = if job.exit_code, do: " (exit #{job.exit_code})", else: ""
-          # The trailing os_pid lets meerkat-app's ListJobs measure the OS
-          # process without a protocol message of its own.
-          emit.(:stdout, "[#{id}] #{job.status}#{suffix}\t#{job.cmd}\t#{job.os_pid}")
+          port_list = ports |> Map.get(job.os_pid, []) |> Enum.join(",")
+          flags = if job.detached, do: "detached", else: ""
+
+          emit.(
+            :stdout,
+            "[#{id}] #{job.status}#{suffix}\t#{job.cmd}\t#{job.os_pid}\t#{port_list}\t#{flags}"
+          )
         end)
     end
 
@@ -168,6 +179,19 @@ defmodule MeerkatDaemon.Evaluator do
       _ ->
         :ok
     end
+  end
+
+  # Only jobs that could still be holding a socket: a finished job's os_pid
+  # refers to nothing, and asking about it would be one `ps` walk for an answer
+  # that is always empty.
+  defp job_ports(jobs) do
+    jobs
+    |> Enum.filter(fn {_id, job} ->
+      job.status in [:running, :stopped] and is_integer(job.os_pid)
+    end)
+    |> Enum.map(fn {_id, job} -> job.os_pid end)
+    |> Enum.uniq()
+    |> Ports.listening_by_root()
   end
 
   ## Pipeline execution -------------------------------------------------

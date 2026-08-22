@@ -54,7 +54,10 @@ now (Phase 1's `Port` version had to merge them).
 
 **Job control** — real, not simulated:
 - `cmd &` — run in the background, prints `[id] started in background`
-- `jobs` — lists id / status (`running` / `stopped` / `done`) / command
+- `jobs` — lists id / status (`running` / `stopped` / `done`) / command,
+  and, tab-separated after it for frontends to read: the OS pid, the TCP
+  ports the job's process tree is listening on, and `detached` if the
+  job has outlived the client that started it
 - `stop <id>` — suspends a running job (SIGSTOP) — our stand-in for
   Ctrl+Z until a client does raw keystroke capture (see
   `meerkat-client`'s roadmap)
@@ -69,6 +72,18 @@ now (Phase 1's `Port` version had to merge them).
   quirk: erlexec reports jobs stopped this way as exit code 0
   (`:normal`) rather than a signal-coded status — that's erlexec's own
   behavior for `:exec.stop`, not something this layer papers over.
+
+**Servers outlive their window** — when a client disconnects, its
+foreground job normally dies with the pty it was attached to: an editor
+or a pager in a closed pane can never be reached again. A job holding a
+*listening socket* is the exception, and the whole point of the split —
+close the window your dev server is running in and it keeps serving.
+It stays in the job table labelled `detached`, `jobs` still reports it
+and what it is listening on, and `kill <id>` from any connection still
+ends it. `lib/meerkat_daemon/ports.ex` is what answers "is this a
+server?" — `/proc` on Linux, `lsof` elsewhere, walking the process tree
+either way because the pid erlexec hands back is the pipeline's `sh -c`,
+not the listener.
 
 All of the above was run against a live daemon while building it —
 background + stop + bg + kill + a blocking `fg` that measured ~2004ms

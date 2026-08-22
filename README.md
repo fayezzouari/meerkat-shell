@@ -39,7 +39,10 @@ meerkat-app (GUI)     ─┘
 
 Both frontends are interchangeable views onto the same daemon: start a
 background job from the CLI, then open the GUI and run `jobs` — it's the
-same job table, because the state never lived in the client.
+same job table, because the state never lived in the client. Close the pane
+your dev server is running in and it keeps serving: a job holding a listening
+socket outlives the window that started it, and the GUI's sidebar lists it with
+the port it's on, what it's costing in memory, and a button to kill it.
 
 ## Installing a build
 

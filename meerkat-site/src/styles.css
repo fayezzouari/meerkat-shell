@@ -1136,8 +1136,16 @@ h1 em { display: inline-block; animation: settle 1.1s var(--ease-out) .5s both; 
   animation: sap 3.2s linear infinite;
 }
 
-/* Growth: the stem draws itself, then the leaves open, once. */
-@keyframes grow { from { stroke-dashoffset: var(--len, 240); } to { stroke-dashoffset: 0; } }
+/* Growth: the stem draws itself out of the soil and up to the window, then the
+   leaves open, once. A plant grows from its roots, and the roots are the half of
+   this one that matters — the engine holds the work; the window is what it
+   reaches up to.
+   The path is measured window-first, so this draws it backwards: a dash the
+   length of the path, offset negative, hides it by pushing the dash off the far
+   end, and closing the offset to zero pulls it back on from that end. Drawing
+   forwards is the same trick with the offset positive.
+     https://jakearchibald.com/2013/animated-line-drawing-svg/ */
+@keyframes grow { from { stroke-dashoffset: var(--grow-start, -240); } to { stroke-dashoffset: 0; } }
 @keyframes unfurl {
   from { opacity: 0; transform: scale(.2); }
   to   { opacity: 1; transform: scale(1); }
@@ -1146,17 +1154,26 @@ h1 em { display: inline-block; animation: settle 1.1s var(--ease-out) .5s both; 
   stroke-dasharray: var(--len, 240);
   animation: grow 1.6s var(--ease-out) both;
 }
+/* Sprigs open in the order the stem reaches them, which is now deepest first:
+   `--order` counts up from the root end, where `--i` counts from the window. */
 .sprig {
   transform-box: fill-box;
   transform-origin: 0% 50%;
   animation: unfurl .7s var(--ease-out) both;
-  animation-delay: calc(.55s + var(--i, 0) * .12s);
+  animation-delay: calc(.55s + var(--order, 0) * .12s);
 }
 /* Leaves that grow back after a window reopens should not wait out the first
    load's delay. */
 .branch[data-live="true"][data-active="true"] .sprig {
-  animation-delay: calc(var(--i, 0) * .07s);
+  animation-delay: calc(var(--order, 0) * .07s);
 }
+
+/* The bud is the last thing the stem makes, so it is not there until the growth
+   arrives at the window. `backwards` and not `both`, for the same reason the
+   window's own entry animation uses it: a filled-forwards animation would keep
+   overriding the opacity that drops the bud when the window closes. */
+@keyframes budSet { from { opacity: 0; } to { opacity: 1; } }
+.branch-bud { animation: budSet .4s var(--ease-out) 1.42s backwards; }
 
 .crossing { position: relative; }
 @media (max-width: 900px) { .branch { display: none; } }

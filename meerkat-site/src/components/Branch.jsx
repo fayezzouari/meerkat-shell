@@ -59,22 +59,43 @@ export default function Branch({ pageRef, windowRef, panelRef, groundRef, live, 
     const panel = panelRef.current;
     if (!page || !windowEl || !panel) return undefined;
 
+    // Where a box sits in the page, walked up the offsetParent chain.
+    //
+    // Deliberately not getBoundingClientRect: that returns the painted box,
+    // transforms included, and both ends of the stem enter the page under one.
+    // The window is held ten pixels low by `riseSoft` for the length of its
+    // delay, then settles — without changing size, so no observer here fires,
+    // and a stem measured on mount stays anchored where the window was rather
+    // than where it is. offsetTop is measured from the offsetParent's padding
+    // edge, the same origin absolute positioning uses, and ignores transforms:
+    // the first measurement is already the settled one, and a window animating
+    // in or dropping out of view never moves the stem.
+    //   https://drafts.csswg.org/cssom-view/#dom-htmlelement-offsettop
+    const layoutBox = (el) => {
+      let left = 0;
+      let top = 0;
+      for (let node = el; node && node !== page; node = node.offsetParent) {
+        left += node.offsetLeft;
+        top += node.offsetTop;
+      }
+      return { left, top, width: el.offsetWidth, height: el.offsetHeight };
+    };
+
     // The measurement is re-run often; only publish it when it actually moved,
     // so a re-measure that finds nothing new costs no render.
     let last = "";
 
     const measure = () => {
-      const pageBox = page.getBoundingClientRect();
-      const win = windowEl.getBoundingClientRect();
-      const jobs = panel.getBoundingClientRect();
-      const ground = groundRef.current?.getBoundingClientRect();
+      const win = layoutBox(windowEl);
+      const jobs = layoutBox(panel);
+      const ground = groundRef.current ? layoutBox(groundRef.current) : null;
 
       // Out of the window's underside, over toward its right; into the panel's
       // top edge, a little right of its centre.
-      const fromX = win.left - pageBox.left + win.width * 0.78;
-      const fromY = win.bottom - pageBox.top;
-      const toX = jobs.left - pageBox.left + jobs.width * 0.62;
-      const toY = jobs.top - pageBox.top;
+      const fromX = win.left + win.width * 0.78;
+      const fromY = win.top + win.height;
+      const toX = jobs.left + jobs.width * 0.62;
+      const toY = jobs.top;
       if (toY - fromY < 40) return; // stacked narrow layouts: nothing to join
 
       const left = Math.min(fromX, toX) - PAD;
@@ -101,7 +122,7 @@ export default function Branch({ pageRef, windowRef, panelRef, groundRef, live, 
 
       // Where the soil line falls inside this box: the crest sits about a third
       // of the way down the ground band.
-      const crestY = ground ? ground.top - pageBox.top + ground.height * 0.33 - top : height;
+      const crestY = ground ? ground.top + ground.height * 0.33 - top : height;
       const crest = Math.min(0.98, Math.max(0.02, crestY / height));
 
       const next = { left, top, width, height, d, ax, tx, crest, crestY };
@@ -187,6 +208,9 @@ export default function Branch({ pageRef, windowRef, panelRef, groundRef, live, 
         height: geometry.height,
         "--len": length,
         "--sap-end": -length,
+        // Negative: the stem is drawn from the root end back toward the window,
+        // against the direction the path was measured in. See `grow`.
+        "--grow-start": -length,
       }}
     >
       <svg
@@ -234,7 +258,9 @@ export default function Branch({ pageRef, windowRef, panelRef, groundRef, live, 
               >
                 <g transform={`rotate(${sprig.angle}) scale(${sprig.scale})`}>
                   <g className={`sprig-state sprig--${sprig.kind}`}>
-                    <g className="sprig" style={{ "--i": i }}>
+                    {/* `--order` counts from the root end: the stem grows up
+                        out of the soil, so that is the order sprigs open in. */}
+                    <g className="sprig" style={{ "--order": SPRIGS.length - 1 - i }}>
                       {sprig.kind === "leaf" ? (
                         <>
                           <path className="twig" d={TWIG_D} fill="none" strokeWidth="1.2" />

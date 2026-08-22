@@ -139,7 +139,10 @@
       }
 
       #sidebar {
-        flex: 0 0 250px;
+        /* Set by sidebar.js from the saved width; the fallback here is the
+           default, so the panel is the right size on the first paint rather
+           than snapping a frame later. */
+        flex: 0 0 var(--sidebar-width, 250px);
         min-height: 0;
         overflow-y: auto;
         background: var(--surface);
@@ -148,6 +151,23 @@
         box-sizing: border-box;
       }
       #sidebar.hidden {
+        display: none;
+      }
+      /* The grab area for resizing, sitting over the sidebar's own 1px border:
+         invisible until touched, so the seam still reads as a hairline rather
+         than as a second divider. Wider than it looks, because a 1px target is
+         not one. */
+      #sidebar-grip {
+        flex: 0 0 4px;
+        cursor: col-resize;
+        background: transparent;
+        transition: background 0.12s ease;
+      }
+      #sidebar-grip:hover,
+      #sidebar-grip.is-dragging {
+        background: var(--accent);
+      }
+      #sidebar-grip.hidden {
         display: none;
       }
       .sidebar-section + .sidebar-section {
@@ -327,8 +347,13 @@
         overflow-wrap: anywhere;
       }
 
+      /* Wraps rather than overflowing. Every atom in here is unsplittable and
+         the sidebar can be dragged narrow, so without this the row runs past
+         the panel's edge and takes the kill button with it — off-screen, on the
+         one row that may have no other way to be stopped. */
       .sidebar-job-top {
         display: flex;
+        flex-wrap: wrap;
         align-items: baseline;
         gap: 6px;
       }
@@ -336,6 +361,7 @@
          worth reading before its command line. */
       .job-port {
         flex: 0 0 auto;
+        white-space: nowrap;
         font-family: var(--font-mono);
         font-size: 10.5px;
         color: var(--accent);
@@ -347,6 +373,7 @@
          a small fact about the row it sits in. */
       .job-tag {
         flex: 0 0 auto;
+        white-space: nowrap;
         font-size: 9.5px;
         letter-spacing: 0.04em;
         text-transform: uppercase;
@@ -541,8 +568,9 @@
         margin: 0 8px;
       }
       .job-mem {
+        flex: 0 0 auto;
+        white-space: nowrap;
         color: var(--text-dim);
-        margin-right: 8px;
       }
       .job-cmd {
         color: var(--text-dim);
@@ -710,6 +738,9 @@
          takes width from the terminals rather than covering them. -->
     <div id="workspace">
       <aside id="sidebar" class="hidden"></aside>
+      <!-- A sibling, not a child: the sidebar rewrites its own innerHTML on
+           every poll, which would take a child grip with it. -->
+      <div id="sidebar-grip" class="hidden"></div>
       <div id="panes"></div>
     </div>
     <!-- Classic scripts, not modules: both set globals the module below

@@ -32,6 +32,7 @@ export function createSidebar(sessionManager) {
   let busy = false;
   let pendingRemove = null; // path awaiting confirmation
   let worktreeError = "";
+  let jobError = "";
 
   // Last polled data, so a re-render triggered by a worktree interaction can
   // redraw the other sections instead of blanking them until the next tick.
@@ -56,16 +57,31 @@ export function createSidebar(sessionManager) {
       .join("");
   }
 
+  // A job row says what it is, what it is holding, and what it costs. Ports come
+  // from the daemon and are the reason a job can still be here at all: one with
+  // a listening socket keeps running when its pane closes, labelled `detached`,
+  // and this row is then the only place it can be seen or stopped.
   function renderJobs(jobs) {
     if (jobs.length === 0) return `<div class="sidebar-empty">no active jobs</div>`;
     return jobs
       .map((j) => {
         const mem = formatMemory(j.memoryKB);
+        const ports = (j.ports || [])
+          .map((p) => `<span class="job-port" title="listening on port ${p}">:${p}</span>`)
+          .join("");
+        const detached = j.detached
+          ? `<span class="job-tag" title="still running — the pane it started in is closed">no window</span>`
+          : "";
         return `<div class="sidebar-row sidebar-job">
           <div class="sidebar-job-top">
             <span class="job-id">[${j.id}]</span>
             <span class="job-status">${escapeHtml(j.status)}</span>
+            ${ports}
             ${mem ? `<span class="job-mem">${mem}</span>` : ""}
+            ${detached}
+            <button class="sidebar-icon-btn sidebar-icon-danger job-kill"
+                    data-act="kill-job" data-job="${j.id}"
+                    title="Kill job ${j.id}">×</button>
           </div>
           <div class="job-cmd">${escapeHtml(j.cmd)}</div>
         </div>`;
@@ -213,15 +229,16 @@ export function createSidebar(sessionManager) {
       <div class="sidebar-section">
         <div class="sidebar-heading">Jobs</div>
         ${renderJobs(jobs)}
+        ${jobError ? `<div class="sidebar-error">${escapeHtml(jobError)}</div>` : ""}
       </div>
     `;
     root.querySelectorAll(".sidebar-session").forEach((row) => {
       row.addEventListener("click", () => sessionManager.switchTo(row.dataset.id));
     });
-    wireWorktrees();
+    wireActions();
   }
 
-  function wireWorktrees() {
+  function wireActions() {
     // Delegated: the buttons sit inside clickable rows, so each handler has to
     // stop the row's own open-a-tab click from firing too.
     root.querySelectorAll("[data-act]").forEach((el) => {
@@ -248,6 +265,9 @@ export function createSidebar(sessionManager) {
             break;
           case "remove-confirm":
             doRemove(el.dataset.path);
+            break;
+          case "kill-job":
+            doKillJob(Number(el.dataset.job));
             break;
         }
       });
@@ -289,6 +309,21 @@ export function createSidebar(sessionManager) {
     } catch (err) {
       busy = false;
       worktreeError = errorText(err);
+    }
+    refresh({ force: true });
+  }
+
+  // No confirmation: it is the same action Ctrl+C-and-then-some already performs
+  // on a pane's own job, and the job it acts on is one the user came here to
+  // stop. The daemon's refusal — a job that finished a moment ago — is worth
+  // showing, since the row is about to disappear either way.
+  async function doKillJob(jobId) {
+    jobError = "";
+    try {
+      const err = await daemon.killJobById(jobId);
+      if (err) jobError = err;
+    } catch (err) {
+      jobError = errorText(err);
     }
     refresh({ force: true });
   }
@@ -361,6 +396,7 @@ export function createSidebar(sessionManager) {
     creating = false;
     pendingRemove = null;
     worktreeError = "";
+    jobError = "";
     root.classList.add("hidden");
     clearInterval(pollTimer);
     pollTimer = null;

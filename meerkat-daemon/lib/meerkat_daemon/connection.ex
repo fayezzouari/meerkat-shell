@@ -33,7 +33,7 @@ defmodule MeerkatDaemon.Connection do
   running program instead of blocking here for the command's lifetime.
   """
   use GenServer
-  alias MeerkatDaemon.{Parser, Evaluator, JobManager}
+  alias MeerkatDaemon.{Parser, Evaluator, JobManager, Ports}
 
   def start_link(socket), do: GenServer.start_link(__MODULE__, socket)
 
@@ -122,16 +122,38 @@ defmodule MeerkatDaemon.Connection do
   # Stale messages from a job we no longer track — ignore rather than crash.
   def handle_info(_msg, state), do: {:noreply, state}
 
-  # The client is gone, so its foreground job — attached to that pane's pty —
-  # has to go too. Left running, it orphans onto the erlexec port process and
-  # reads `running` forever, since this Connection is what would have handled
-  # its :DOWN. Background jobs are deliberately left alone.
+  # The client is gone. Its foreground job was attached to that pane's pty, and
+  # for most jobs that is the end of them: an editor or a pager with no window
+  # left to draw into can never be reached again, so it dies with the pane.
+  #
+  # A job holding a listening socket is the exception, and the reason this
+  # daemon exists — a dev server should not go down because someone closed the
+  # window they started it from. It is left running and labelled `detached`, so
+  # `jobs` still reports it, meerkat-app's sidebar can show what it is serving,
+  # and `kill <id>` from any connection can still end it.
+  #
+  # Orphaning is safe because nothing links the OS process to this pid: erlexec
+  # kills a job when a *linked* owner dies, and these are started with
+  # `:monitor`. The output it goes on producing is delivered to a dead pid and
+  # dropped, and once it exits, JobManager.reconcile/1 notices the erlexec
+  # handle is gone and closes the entry out on the next read. Background jobs
+  # were already left alone.
   @impl true
   def terminate(_reason, state) do
-    if state.current do
-      :exec.stop(state.current.pid)
-      # 143 = 128 + SIGTERM, which :exec.stop/1 sends before escalating.
-      JobManager.finish_job(state.current.id, 143)
+    case state.current do
+      nil ->
+        :ok
+
+      %{id: id, pid: pid, os_pid: os_pid} ->
+        case Ports.listening(os_pid) do
+          [] ->
+            :exec.stop(pid)
+            # 143 = 128 + SIGTERM, which :exec.stop/1 sends before escalating.
+            JobManager.finish_job(id, 143)
+
+          _ports ->
+            JobManager.detach(id)
+        end
     end
 
     :ok

@@ -15,14 +15,48 @@ function errorText(err) {
   return String(err?.message || err || "unknown error");
 }
 
+// Width lives here rather than in a preference: it is a drag, not a setting.
+const WIDTH_KEY = "meerkat.sidebar";
+const DEFAULT_WIDTH = 250;
+const MIN_WIDTH = 180;
+
+// Whatever the window is doing, leave enough beside the panel for a terminal
+// worth having. Recomputed per call because the window can be resized under a
+// saved width — including into fullscreen and back out.
+function widthBounds() {
+  return { min: MIN_WIDTH, max: Math.max(MIN_WIDTH, Math.min(560, window.innerWidth - 320)) };
+}
+
+function readWidth() {
+  try {
+    const saved = Number(JSON.parse(localStorage.getItem(WIDTH_KEY) || "{}").width);
+    if (Number.isFinite(saved) && saved > 0) return saved;
+  } catch {
+    // A corrupt entry shouldn't cost the sidebar its width.
+  }
+  return DEFAULT_WIDTH;
+}
+
+// Drives the CSS variable index.html sizes #sidebar from. Returns what was
+// actually applied, so the caller's idea of the width can't drift from the
+// panel's.
+function applyWidth(width) {
+  const { min, max } = widthBounds();
+  const clamped = Math.round(Math.min(max, Math.max(min, width)));
+  document.documentElement.style.setProperty("--sidebar-width", `${clamped}px`);
+  return clamped;
+}
+
 // Persistent, not modal: it takes horizontal space from the terminals rather
 // than covering them, and so has to stay current while open — hence the poll
 // in open(). Jobs are daemon-wide, not scoped to the focused pane; worktrees
 // are scoped to the repo the focused pane sits in.
 export function createSidebar(sessionManager) {
   const root = document.getElementById("sidebar");
+  const grip = document.getElementById("sidebar-grip");
   let visible = false;
   let pollTimer = null;
+  let width = applyWidth(readWidth());
 
   // Worktree section state. `creating` and `pendingRemove` also suspend the
   // poll's re-render: rebuilding innerHTML underneath a focused input or a
@@ -383,9 +417,63 @@ export function createSidebar(sessionManager) {
     render(sessionManager.list(), activeJobs);
   }
 
+  // Mirrors sessionManager's split dividers: mousedown on the handle, then
+  // listeners on the window, because the pointer will outrun a 4px hit area the
+  // moment the drag starts. Only the flex basis changes, so nothing is
+  // reparented mid-drag — the terminals beside it re-fit off their own
+  // ResizeObserver, and session.js only tells the daemon when rows/cols
+  // actually change.
+  function startResize(event) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = width;
+
+    const onMove = (e) => {
+      width = applyWidth(startWidth + (e.clientX - startX));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.classList.remove("dragging-divider");
+      grip.classList.remove("is-dragging");
+      saveWidth();
+    };
+
+    document.body.classList.add("dragging-divider");
+    grip.classList.add("is-dragging");
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  // Once per drag, not once per mousemove.
+  function saveWidth() {
+    try {
+      localStorage.setItem(WIDTH_KEY, JSON.stringify({ width }));
+    } catch {
+      // Not worth surfacing: the width is a convenience, not state.
+    }
+  }
+
+  if (grip) {
+    grip.addEventListener("mousedown", startResize);
+    // The convention for a splitter, and the way back from a width that got
+    // dragged somewhere unhelpful.
+    grip.addEventListener("dblclick", () => {
+      width = applyWidth(DEFAULT_WIDTH);
+      saveWidth();
+    });
+  }
+
+  // A window that shrank under a saved width would otherwise leave the panel
+  // wider than the bounds allow.
+  window.addEventListener("resize", () => {
+    width = applyWidth(width);
+  });
+
   function open() {
     visible = true;
     root.classList.remove("hidden");
+    grip?.classList.remove("hidden");
     refresh();
     // Cleared on close, so a hidden sidebar costs nothing.
     pollTimer = setInterval(refresh, 2000);
@@ -398,6 +486,7 @@ export function createSidebar(sessionManager) {
     worktreeError = "";
     jobError = "";
     root.classList.add("hidden");
+    grip?.classList.add("hidden");
     clearInterval(pollTimer);
     pollTimer = null;
   }

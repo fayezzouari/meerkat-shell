@@ -78,18 +78,25 @@ export function detectOs(ua = navigator.userAgent, platform = navigator.platform
 }
 
 export const DOWNLOAD_FILES = {
+  // A tarball on macOS too, not a .dmg. A disk image is the nicer object, but a
+  // browser marks its download quarantined and macOS will not open unsigned,
+  // un-notarized code that carries that flag — which needs an Apple Developer ID
+  // this project does not have. A tarball has no such problem, as long as it is
+  // unpacked with `tar` rather than by the Finder (see the note in
+  // InstallChoice). scripts/package-dmg.sh is still there for the day there is a
+  // certificate to sign with.
   macos: [
     {
       id: "darwin-arm64",
-      file: "Meerkat-darwin-arm64.dmg",
+      file: "meerkat-darwin-arm64.tar.gz",
       label: "Download for Mac",
-      detail: "Apple silicon · .dmg",
+      detail: "Apple silicon · .tar.gz",
     },
     {
       id: "darwin-amd64",
-      file: "Meerkat-darwin-amd64.dmg",
+      file: "meerkat-darwin-amd64.tar.gz",
       label: "Download for Intel Mac",
-      detail: "Intel · .dmg",
+      detail: "Intel · .tar.gz",
     },
   ],
   linux: [

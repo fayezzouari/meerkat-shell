@@ -52,6 +52,22 @@ terminate a process — erlexec exposes the actual OS pid so real
 signals work. stdout and stderr are also genuinely separate streams
 now (Phase 1's `Port` version had to merge them).
 
+**One terminal per connection** (`lib/meerkat_daemon/terminal.ex`) — foreground
+commands share a single pty rather than each getting one of their own. That is
+what makes `sudo` behave: a process can only claim a controlling terminal by
+first becoming a session leader, so a pty per command is a *session* per
+command, and `sudo`'s timestamp is keyed on the terminal plus the start time of
+that session's leader. A new leader every command meant every `sudo` asked for a
+password again. Now an anchor process holds the session and the pty open, and
+each command is handed the slave device on its three fds — `isatty` is still
+true, but nothing calls `setsid`, so the session outlives them all.
+
+Two consequences, both handled in `connection.ex`: `^C` is delivered as an
+explicit SIGINT, because the commands are not the terminal's foreground process
+group and the line discipline has nothing to signal; and a job killed by a
+signal is followed by `stty sane`, since the terminal it may have left in raw
+mode now outlives it.
+
 **Job control** — real, not simulated:
 - `cmd &` — run in the background, prints `[id] started in background`
 - `jobs` — lists id / status (`running` / `stopped` / `done`) / command,

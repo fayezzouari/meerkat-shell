@@ -192,12 +192,18 @@ jobs:
 
           echo "MEERKAT_SIGN_IDENTITY=$SIGN_IDENTITY" >> "$GITHUB_ENV"
 
+      # --no-dmg: there is no Developer ID for this project yet, and an unsigned
+      # disk image is one macOS refuses to open after a download — release.sh
+      # will not publish one. So macOS ships the same tarball as Linux, which
+      # needs no signature because `tar` does not propagate the quarantine flag.
+      # The signing step above and package-dmg.sh are the way back: get a
+      # certificate, set the secrets, drop this flag.
       - env:
           GH_TOKEN: ${{ github.token }}
           MEERKAT_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
           MEERKAT_APPLE_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
           MEERKAT_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
-        run: ./scripts/release.sh --publish
+        run: ./scripts/release.sh --publish --no-dmg
 
       - uses: actions/upload-artifact@v5
         with:

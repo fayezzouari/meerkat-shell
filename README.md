@@ -53,8 +53,11 @@ curl -fsSL https://meerkat.fayez-zouari.tn/install.sh | sh
 That installs into `~/.meerkat` and leaves you with `meerkat` (the shell),
 `meerkat-app` (the window), and `meerkat-engine` (start/stop/status) in
 `~/.meerkat/bin`. See [`meerkat-site/README.md`](meerkat-site/README.md) for the
-layout it writes and how to uninstall. macOS and Linux only — on Windows, build
-from source as described above.
+layout it writes and how to uninstall. macOS and Linux only. On Windows, run it
+inside WSL2 and use the Linux build: building natively is not an option, because
+the engine's job control is [erlexec](https://github.com/saleyn/erlexec), whose
+port program is POSIX (`fork`/`execve`/`setsid`/`termios`) and has no Windows
+target.
 
 Or take a file instead. On macOS the release carries a `.dmg`; drag Meerkat to
 Applications and its first launch offers to write the same `~/.meerkat/bin`

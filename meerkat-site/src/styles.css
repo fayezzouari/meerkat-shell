@@ -552,6 +552,10 @@ h1 em {
   font-family: var(--mono); font-size: .76rem; color: var(--faint-light);
 }
 .choice-dark .dl-others { color: var(--faint-dark); }
+/* The note under the download panel: --faint-light is near-black, so in the
+   closing section it was dark text on dark ground — present in the DOM and
+   invisible on screen. */
+.choice-dark .install-note { color: var(--faint-dark); }
 .dl-others a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .dl-note { margin-top: .9rem; max-width: 46ch; }
 
@@ -591,7 +595,8 @@ h1 em {
   min-width: 0;
 }
 .install-cmd code::before { content: "$ "; color: var(--accent); }
-.install-cmd button {
+.install-cmd button,
+.dl-steps button {
   flex: none;
   border: 0; border-left: 1px solid var(--line-dark);
   background: transparent; color: var(--sand);
@@ -599,8 +604,34 @@ h1 em {
   text-transform: uppercase; padding-inline: 1.05rem; cursor: pointer;
   transition: background .14s ease, color .14s ease;
 }
-.install-cmd button:hover { background: var(--accent); color: var(--burrow); }
-.install-cmd button.done { color: var(--wire); }
+.install-cmd button:hover,
+.dl-steps button:hover { background: var(--accent); color: var(--burrow); }
+.install-cmd button.done,
+.dl-steps button.done { color: var(--wire); }
+
+/* The same block as the curl line, but two commands deep: each line carries its
+   own prompt, and the copy button spans the pair rather than sitting beside one
+   of them. */
+.dl-steps {
+  display: flex;
+  align-items: stretch;
+  margin-top: 1rem;
+  background: var(--burrow);
+  color: var(--sand);
+  max-width: 100%;
+}
+.dl-steps-lines {
+  display: grid;
+  gap: .35rem;
+  padding: .85rem 1.1rem;
+  min-width: 0;
+}
+.dl-steps code {
+  font-size: clamp(.76rem, 1.35vw, .9rem);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.dl-steps code::before { content: "$ "; color: var(--accent); }
 
 .install-note {
   font-family: var(--mono); font-size: .76rem; line-height: 1.6;

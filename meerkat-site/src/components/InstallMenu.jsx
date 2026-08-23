@@ -103,7 +103,7 @@ export default function InstallMenu() {
 
           {os === "windows" && (
             <p className="install-pop-note">
-              No Windows build yet — {OS_NAMES.windows} means building from source.
+              No native {OS_NAMES.windows} build — install it inside WSL2.
             </p>
           )}
         </div>

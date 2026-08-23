@@ -102,8 +102,8 @@ export default function InstallChoice({ id, tone = "light" }) {
 
           {os === "windows" && (
             <p className="dl-none">
-              There is no Windows build yet. Build from source, or run Meerkat under WSL
-              with the Linux file below.
+              There is no native Windows build — the engine's job control is POSIX to the
+              core. Run Meerkat inside WSL2 with the Linux file below.
             </p>
           )}
           {(os === "ios" || os === "android" || os === "unknown") && (

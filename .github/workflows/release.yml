@@ -109,7 +109,13 @@ jobs:
         include:
           - runner: macos-14
             target: darwin-arm64
-          - runner: macos-13
+          # macos-13 was retired on 2025-12-04. A job asking for it is never
+          # given a runner: it queues for GitHub's 24-hour limit and is then
+          # cancelled, having run no steps, which is how v0.1.0 ended up with no
+          # Intel build at all. macos-15-intel is the replacement, and the last
+          # x86_64 image — it goes away in August 2027, and with it the Intel
+          # build.
+          - runner: macos-15-intel
             target: darwin-amd64
           - runner: ubuntu-24.04
             target: linux-amd64
@@ -197,3 +203,46 @@ jobs:
         with:
           name: meerkat-${{ matrix.target }}
           path: meerkat-site/public/downloads/latest/
+
+  # The download buttons on the site are static names pointing at
+  # releases/latest/download. If a build leg is missing, or is renamed, or never
+  # gets a runner, the release still publishes and the page still shows the
+  # button — it just 404s, on the visitor's machine, silently. That is how v0.1.0
+  # shipped with no .dmg at all. So the last word on a release is whether every
+  # file the page offers is actually on it.
+  #
+  # The expected names come from the page's own data rather than a list kept here,
+  # because a list kept here is a list that drifts.
+  verify:
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.create-release.outputs.tag }}
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: |
+          expected="$(node --input-type=module -e "
+            const m = await import('./meerkat-site/src/data/install.js');
+            console.log(Object.values(m.DOWNLOAD_FILES).flat().map((f) => f.file).join('\n'));
+          ")"
+          actual="$(gh release view "$TAG" --json assets -q '.assets[].name')"
+
+          echo "On $TAG:"; echo "$actual" | sed 's/^/  /'
+
+          missing=0
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            if printf '%s\n' "$actual" | grep -qxF "$file"; then
+              echo "  ok      $file"
+            else
+              echo "::error::$file is offered by the download page but is not on $TAG"
+              missing=1
+            fi
+          done <<< "$expected"
+
+          [ "$missing" -eq 0 ] || exit 1
+          echo "Every file the page offers is on the release." >> "$GITHUB_STEP_SUMMARY"

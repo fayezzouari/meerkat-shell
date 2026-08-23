@@ -12,8 +12,15 @@ defmodule MeerkatDaemon.SocketServer do
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
+  # Configured path first, then the environment, then the default. The config
+  # layer exists for `mix test`: the app starts before the tests do, and binding
+  # the default path meant a test run deleted the socket of whatever engine the
+  # developer had running and left it unreachable — with their jobs still inside
+  # it. Tests get their own path (config/test.exs) and cannot do that.
   def socket_path do
-    System.get_env("MEERKAT_SOCK") || Path.expand("~/.meerkat/meerkat.sock")
+    Application.get_env(:meerkat_daemon, :socket_path) ||
+      System.get_env("MEERKAT_SOCK") ||
+      Path.expand("~/.meerkat/meerkat.sock")
   end
 
   @impl true

@@ -22,18 +22,23 @@ defmodule MeerkatDaemon.Evaluator do
   alias MeerkatDaemon.{JobManager, Ports}
 
   @type emit :: (:stdout | :stderr, String.t() -> :ok)
-  @type winsz :: {rows :: non_neg_integer(), cols :: non_neg_integer()}
 
   @builtins ~w(cd exit quit jobs fg bg kill stop)
 
-  @spec run([MeerkatDaemon.Parser.stage()], String.t(), MeerkatDaemon.Parser.mode(), emit, winsz) ::
+  @spec run(
+          [MeerkatDaemon.Parser.stage()],
+          String.t(),
+          MeerkatDaemon.Parser.mode(),
+          emit,
+          MeerkatDaemon.Terminal.t() | nil
+        ) ::
           {:ok, String.t(), non_neg_integer()}
           | {:exit, String.t(), non_neg_integer()}
           | {:running, pos_integer(), pid(), non_neg_integer(), String.t()}
-  def run(stages, cwd, mode, emit, winsz \\ {24, 80}) do
+  def run(stages, cwd, mode, emit, terminal \\ nil) do
     case stages do
       [{cmd, args}] when cmd in @builtins -> builtin(cmd, args, cwd, emit)
-      _ -> exec_pipeline(stages, cwd, mode, emit, winsz)
+      _ -> exec_pipeline(stages, cwd, mode, emit, terminal)
     end
   end
 
@@ -196,37 +201,45 @@ defmodule MeerkatDaemon.Evaluator do
 
   ## Pipeline execution -------------------------------------------------
 
-  # Returns immediately without streaming: erlexec's messages land in the
-  # caller's (Connection's) mailbox, interleaved with client :tcp messages,
-  # which is what lets keystrokes reach the running program.
+  # A foreground command is given the connection's terminal rather than one of
+  # its own — the slave device on all three fds. See MeerkatDaemon.Terminal for
+  # why: a pty per command is a session per command, and `sudo` will not carry
+  # credentials across sessions.
   #
-  # pty_echo is on because the client stops echoing locally while a job runs.
+  # It returns immediately without streaming. The command's output goes to the
+  # pty, so it reaches Connection through the terminal's anchor rather than as
+  # this process's :stdout messages; what still lands here is the :DOWN, which
+  # is how the exit code gets back.
   #
   # PAGER/GIT_PAGER/MANPAGER are forced to `cat`: with a real pty, isatty()
   # succeeds and git/man reach for `less`, which then blocks on keystrokes and
   # looks exactly like a hung command. Directly-invoked pagers still work.
-  defp exec_pipeline(stages, cwd, :foreground, _emit, {rows, cols}) do
-    cmd_string = render(stages)
-    id = JobManager.new_job(cmd_string)
+  defp exec_pipeline(stages, cwd, :foreground, emit, terminal) do
+    case terminal do
+      %{tty: tty} ->
+        cmd_string = render(stages)
+        id = JobManager.new_job(cmd_string)
 
-    {:ok, pid, os_pid} =
-      :exec.run(cmd_string, [
-        :stdin,
-        :stdout,
-        :stderr,
-        :monitor,
-        :pty,
-        :pty_echo,
-        {:cd, cwd},
-        {:winsz, {rows, cols}},
-        {:env, [{"PAGER", "cat"}, {"GIT_PAGER", "cat"}, {"MANPAGER", "cat"}]}
-      ])
+        {:ok, pid, os_pid} =
+          :exec.run(cmd_string, [
+            {:stdin, tty},
+            {:stdout, tty},
+            {:stderr, tty},
+            :monitor,
+            {:cd, cwd},
+            {:env, [{"PAGER", "cat"}, {"GIT_PAGER", "cat"}, {"MANPAGER", "cat"}]}
+          ])
 
-    JobManager.set_handle(id, pid, os_pid)
-    {:running, id, pid, os_pid, cwd}
+        JobManager.set_handle(id, pid, os_pid)
+        {:running, id, pid, os_pid, cwd}
+
+      nil ->
+        emit.(:stderr, "no terminal for this connection — cannot run a foreground command")
+        {:ok, cwd, 1}
+    end
   end
 
-  defp exec_pipeline(stages, cwd, :background, emit, _winsz) do
+  defp exec_pipeline(stages, cwd, :background, emit, _terminal) do
     cmd_string = render(stages)
     id = JobManager.new_job(cmd_string)
 

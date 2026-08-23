@@ -19,9 +19,11 @@ export const OPERATING_SYSTEMS = [
   {
     id: "windows",
     name: "Windows 10/11",
-    // The one-line installer is macOS and Linux only, so this row says what it
-    // actually takes rather than implying the same command works.
-    detail: "Build from source for now.",
+    // Not "build from source": the engine's job control is erlexec, whose port
+    // program is POSIX (fork/execve/setsid/termios) and does not build on
+    // Windows at all. WSL2 is the honest answer, and it is a real one — inside
+    // it Meerkat is the Linux build.
+    detail: "Under WSL2 for now.",
     path: "M3 4.6 10.6 3.6v7.9H3V4.6Zm0 8.1h7.6v7.8L3 19.4v-6.7Zm8.9-9.3L21.5 2v9.5h-9.6V3.4Zm0 9.3h9.6V22l-9.6-1.4v-7.9Z",
   },
 ];

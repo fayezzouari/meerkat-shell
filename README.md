@@ -59,17 +59,30 @@ the engine's job control is [erlexec](https://github.com/saleyn/erlexec), whose
 port program is POSIX (`fork`/`execve`/`setsid`/`termios`) and has no Windows
 target.
 
-Or take a file instead. On macOS the release carries a `.dmg`; drag Meerkat to
-Applications and its first launch offers to write the same `~/.meerkat/bin`
-wrappers, so the window and the terminal command end up on one engine either
-way. That works because the bundle carries the engine and the command line
-inside `Contents/Resources` — a disk image hands over one thing, so that thing
-has to be complete. On Linux the tarball ships `install.sh` inside it, and an
-unpacked release installs itself with no network:
+Or take a file instead. Every platform ships the same thing, a tarball with
+`install.sh` inside it, so an unpacked release installs itself with no network.
+Two commands, from Terminal:
 
 ```
-tar -xzf meerkat-linux-amd64.tar.gz -C meerkat && ./meerkat/install.sh
+mkdir -p meerkat && tar -xzf ~/Downloads/meerkat-darwin-arm64.tar.gz -C meerkat
+./meerkat/install.sh
 ```
+
+The `mkdir` is not optional — the archive is flat, and `tar -C` will not create
+the directory it is pointed at. Swap the filename for `meerkat-darwin-amd64` on
+an Intel Mac or `meerkat-linux-amd64` on Linux; nothing else changes.
+
+Use `tar`, not a double-click. On macOS that is not a style preference: the
+Finder passes the download's quarantine flag to everything it extracts, and
+macOS will not launch a quarantined app Apple has not notarized. `tar` does not
+set the flag, which is the same reason the curl install works.
+
+There is no `.dmg`. A disk image is quarantined the same way, and getting one
+past Gatekeeper needs a Developer ID certificate and a notarization round-trip;
+[`scripts/package-dmg.sh`](scripts/package-dmg.sh) and the release workflow are
+ready for it, waiting on a certificate rather than on code. The macOS tarball
+carries a complete `Meerkat.app` either way, engine and command line inside
+`Contents/Resources` included.
 
 The page and the binaries are published separately. The page is a static deploy
 of `meerkat-site`; the release tarballs are GitHub Release assets, because each
@@ -83,17 +96,20 @@ served it.
 Run the `release` workflow from the Actions tab and pick what to increment:
 patch, minor, major, or none. It reads `VERSION`, works out the next number,
 commits the bump, tags it, opens the GitHub Release, then builds `darwin-arm64`,
-`darwin-amd64` and `linux-amd64` on their own runners and uploads each tarball —
-plus, on macOS, a `.dmg` — with a `.sha256` beside it. Nothing to remember and
-nothing to keep in sync — the version lives in `VERSION` and the tag is derived
-from it.
+`darwin-amd64` and `linux-amd64` on their own runners and uploads each tarball
+with a `.sha256` beside it. A final job then checks the release against the
+download page's own asset list, so a leg that silently failed to produce a file
+the page offers fails the build instead of the visitor's download. Nothing to
+remember and nothing to keep in sync — the version lives in `VERSION` and the tag
+is derived from it.
 
-Signing the disk image is the one thing that needs setting up outside the repo.
-macOS refuses code that arrives with a browser's quarantine flag unless it is
-signed and notarized, which the curl install sidesteps only because `tar` does
-not set that flag. Set these repository secrets and the macOS runners do the
-rest; leave them unset and the `.dmg` still builds, unsigned, and will not open
-after a download:
+Publishing a `.dmg` is the one thing that needs setting up outside the repo, and
+the reason there isn't one yet. macOS refuses code that arrives with a browser's
+quarantine flag unless it is signed and notarized, which the tarball sidesteps
+only because `tar` does not set that flag. Set these repository secrets, drop the
+`--no-dmg` from the workflow's `release.sh` call, and the macOS runners do the
+rest. Left unset, `release.sh --publish` refuses to upload a disk image nobody
+could open — `--allow-unsigned` overrides that, for a fork or a dry run:
 
 | Secret | What it is |
 | --- | --- |
@@ -128,8 +144,9 @@ curl -fsSL http://localhost:5273/install.sh | sh
 ```
 
 A local `.dmg` build is unsigned unless `MEERKAT_SIGN_IDENTITY` is exported —
-fine for checking the layout, not for handing to anyone. See
-[`scripts/package-dmg.sh`](scripts/package-dmg.sh) for the full set of variables.
+fine for checking the layout, not for handing to anyone, and `--publish` will not
+upload it. See [`scripts/package-dmg.sh`](scripts/package-dmg.sh) for the full set
+of variables.
 
 ## Protocol
 

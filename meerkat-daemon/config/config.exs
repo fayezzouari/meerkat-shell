@@ -11,3 +11,9 @@ import Config
 if System.get_env("USER") == "root" or match?({"0\n", 0}, System.cmd("id", ["-u"])) do
   config :erlexec, root: true, user: "root", limit_users: ["root"]
 end
+
+# Per-environment overrides. Only test has any, but the import has to be here
+# for it to be read at all.
+if File.exists?(Path.join(__DIR__, "#{config_env()}.exs")) do
+  import_config "#{config_env()}.exs"
+end

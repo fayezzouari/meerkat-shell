@@ -8,9 +8,10 @@ defmodule MeerkatDaemon.Connection do
 
     client -> daemon:
       "L" <> line   one full line of shell input
-      "I" <> bytes  raw bytes forwarded to the current foreground job's
-                    pty stdin (only meaningful while a job is running;
-                    ignored otherwise)
+      "I" <> bytes  raw bytes typed on the connection's terminal (only
+                    meaningful while a job is running; ignored otherwise).
+                    A lone 0x03 is delivered to the running job as SIGINT
+                    rather than written through — see forward_input/2
       "R" <> <<rows::16, cols::16>>   terminal resize
       "K"           terminate the current foreground job outright; ignored
                     if no job is running
@@ -27,13 +28,16 @@ defmodule MeerkatDaemon.Connection do
   "raw mode" phase; the client infers its own editing-vs-passthrough mode from
   whether an "X" is still outstanding.
 
-  Foreground jobs run attached to a pty and non-blocking: erlexec's
-  `:stdout`/`:stderr`/`:DOWN` messages land in this process's mailbox
-  interleaved with `:tcp` messages, which is what lets a keystroke reach a
-  running program instead of blocking here for the command's lifetime.
+  Foreground jobs run non-blocking, attached to one pty shared by every command
+  on this connection (`MeerkatDaemon.Terminal`, which explains why it is shared
+  rather than one per command). Their output arrives as the terminal's
+  `:stdout`, and their `:DOWN` lands here directly, interleaved with `:tcp`
+  messages — which is what lets a keystroke reach a running program instead of
+  blocking here for the command's lifetime.
   """
   use GenServer
-  alias MeerkatDaemon.{Parser, Evaluator, JobManager, Ports}
+  require Logger
+  alias MeerkatDaemon.{Parser, Evaluator, JobManager, Ports, Terminal}
 
   def start_link(socket), do: GenServer.start_link(__MODULE__, socket)
 
@@ -46,7 +50,17 @@ defmodule MeerkatDaemon.Connection do
     # Without this, a supervisor-initiated shutdown kills this process
     # outright, terminate/2 never runs, and the foreground job leaks.
     Process.flag(:trap_exit, true)
-    {:ok, %{socket: socket, cwd: System.get_env("HOME", "/"), current: nil, winsz: {24, 80}}}
+
+    {:ok,
+     %{
+       socket: socket,
+       cwd: System.get_env("HOME", "/"),
+       current: nil,
+       winsz: {24, 80},
+       # Opened on the first foreground command, not here: a connection that
+       # only ever runs builtins never needs a pty. See ensure_terminal/1.
+       term: nil
+     }}
   end
 
   # Sent by the acceptor once :gen_tcp.controlling_process/2 completed — only
@@ -72,12 +86,14 @@ defmodule MeerkatDaemon.Connection do
         end
 
       <<?I, data::binary>> ->
-        if state.current, do: :exec.send(state.current.os_pid, data)
+        forward_input(data, state)
         :inet.setopts(socket, active: :once)
         {:noreply, state}
 
       <<?R, rows::16, cols::16>> ->
-        if state.current, do: :exec.winsz(state.current.os_pid, rows, cols)
+        # Stored either way: a terminal opened later starts at the right size,
+        # which is what stops a program's first frame being drawn to 24x80.
+        if state.term, do: Terminal.resize(state.term, rows, cols)
         :inet.setopts(socket, active: :once)
         {:noreply, %{state | winsz: {rows, cols}}}
 
@@ -96,15 +112,17 @@ defmodule MeerkatDaemon.Connection do
   def handle_info({:tcp_closed, _socket}, state), do: {:stop, :normal, state}
   def handle_info({:tcp_error, _socket, _reason}, state), do: {:stop, :normal, state}
 
-
-  # A pty merges stdout/stderr onto one fd, so :stderr shouldn't normally fire
-  # here, but it's handled the same way defensively.
-  def handle_info({:stdout, os_pid, data}, %{current: %{os_pid: os_pid}} = state) do
+  # Everything written to this connection's terminal, by whichever command holds
+  # it. The anchor is what erlexec reports to, since the commands write to the
+  # pty as a file rather than through erlexec. A pty merges stdout and stderr
+  # onto one fd, so :stderr shouldn't normally fire, but it is handled the same
+  # way defensively.
+  def handle_info({:stdout, os_pid, data}, %{term: %{os_pid: os_pid}} = state) do
     send_frame(state.socket, ?P, data)
     {:noreply, state}
   end
 
-  def handle_info({:stderr, os_pid, data}, %{current: %{os_pid: os_pid}} = state) do
+  def handle_info({:stderr, os_pid, data}, %{term: %{os_pid: os_pid}} = state) do
     send_frame(state.socket, ?P, data)
     {:noreply, state}
   end
@@ -115,6 +133,9 @@ defmodule MeerkatDaemon.Connection do
       ) do
     exit_code = Evaluator.decode_exit(reason)
     JobManager.finish_job(id, exit_code)
+    # 128+n means a signal, so the program did not run its own cleanup — and the
+    # terminal it may have put into raw mode is shared now, and stays behind.
+    if exit_code >= 128 and state.term, do: Terminal.restore(state.term)
     send_frame(state.socket, ?X, Integer.to_string(exit_code))
     {:noreply, %{state | current: nil}}
   end
@@ -140,24 +161,70 @@ defmodule MeerkatDaemon.Connection do
   # were already left alone.
   @impl true
   def terminate(_reason, state) do
-    case state.current do
-      nil ->
-        :ok
+    detached =
+      case state.current do
+        nil ->
+          nil
 
-      %{id: id, pid: pid, os_pid: os_pid} ->
-        case Ports.listening(os_pid) do
-          [] ->
-            :exec.stop(pid)
-            # 143 = 128 + SIGTERM, which :exec.stop/1 sends before escalating.
-            JobManager.finish_job(id, 143)
+        %{id: id, pid: pid, os_pid: os_pid} ->
+          case Ports.listening(os_pid) do
+            [] ->
+              :exec.stop(pid)
+              # 143 = 128 + SIGTERM, which :exec.stop/1 sends before escalating.
+              JobManager.finish_job(id, 143)
+              nil
 
-          _ports ->
-            JobManager.detach(id)
-        end
+            _ports ->
+              JobManager.detach(id)
+              pid
+          end
+      end
+
+    # The detached job is still holding this terminal's fds. Closing it now
+    # would make the job's next write fail with EIO — for a server that logs
+    # each request, a slow death by logging. So the terminal is handed to a
+    # watcher that closes it when the job is finally gone.
+    case {state.term, detached} do
+      {nil, _} -> :ok
+      {term, nil} -> Terminal.close(term)
+      {term, job_pid} -> Terminal.outlive(term, job_pid)
     end
 
     :ok
   end
+
+  # ^C arrives as a byte and leaves as a signal. The commands on this terminal
+  # are not its foreground process group — they are not session leaders, which
+  # is exactly what keeps sudo's credentials valid across commands — so the line
+  # discipline has nothing to signal. Delivering it here is what a terminal
+  # would have done anyway.
+  defp forward_input(<<3>>, %{current: %{os_pid: os_pid}}) do
+    :exec.kill(os_pid, :sigint)
+  end
+
+  # Only while something is running: with no job, the client is echoing locally,
+  # and bytes written to the pty would come back doubled.
+  defp forward_input(data, %{current: current, term: term}) when current != nil and term != nil do
+    Terminal.write(term, data)
+  end
+
+  defp forward_input(_data, _state), do: :ok
+
+  # A foreground command needs the terminal; a builtin or a background job does
+  # not. Failing to open one is reported and survivable — the connection keeps
+  # working for everything that does not need a pty.
+  defp ensure_terminal(%{term: nil} = state) do
+    case Terminal.open(state.winsz) do
+      {:ok, term} ->
+        %{state | term: term}
+
+      {:error, reason} ->
+        Logger.error("could not open a terminal for this connection: #{inspect(reason)}")
+        state
+    end
+  end
+
+  defp ensure_terminal(state), do: state
 
   defp dispatch("", state) do
     send_frame(state.socket, ?X, "0")
@@ -181,7 +248,9 @@ defmodule MeerkatDaemon.Connection do
           :stderr, text -> send_frame(state.socket, ?E, text)
         end
 
-        case Evaluator.run(stages, state.cwd, mode, emit, state.winsz) do
+        state = if mode == :foreground, do: ensure_terminal(state), else: state
+
+        case Evaluator.run(stages, state.cwd, mode, emit, state.term) do
           {:exit, _cwd, _code} ->
             send_frame(state.socket, ?X, "0")
             {:stop, state}

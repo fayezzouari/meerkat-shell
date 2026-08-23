@@ -21,16 +21,19 @@ OUT_DIR="$ROOT/meerkat-site/public/downloads/latest"
 BUILD_APP=1
 BUILD_DMG=1
 PUBLISH=0
+ALLOW_UNSIGNED=0
 for arg in "$@"; do
   case "$arg" in
     --no-app)  BUILD_APP=0 ;;
     --no-dmg)  BUILD_DMG=0 ;;
     --publish) PUBLISH=1 ;;
+    --allow-unsigned) ALLOW_UNSIGNED=1 ;;
     -h|--help)
-      echo "usage: scripts/release.sh [--no-app] [--no-dmg] [--publish]"
+      echo "usage: scripts/release.sh [--no-app] [--no-dmg] [--publish] [--allow-unsigned]"
       echo "  --no-app   skip the GUI (needs the wails CLI); ships the daemon and CLI only"
       echo "  --no-dmg   skip the macOS disk image; ships the tarball only"
       echo "  --publish  upload the assets to the GitHub Release for v$VERSION (needs gh)"
+      echo "  --allow-unsigned  publish a .dmg macOS will refuse to open (forks, dry runs)"
       echo
       echo "Signing the .dmg (see scripts/package-dmg.sh):"
       echo "  MEERKAT_SIGN_IDENTITY, MEERKAT_NOTARY_PROFILE"
@@ -62,6 +65,10 @@ STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
+warn_unsigned() {
+  printf '\033[33mwarning:\033[0m publishing %s unsigned — macOS will refuse to open it.\n' \
+    "$(basename "$1")" >&2
+}
 
 step "Building the command line ($OS/$ARCH)"
 ( cd "$ROOT/meerkat-client" && go build -trimpath -o "$STAGE/meerkat-cli" . )
@@ -131,7 +138,41 @@ for path in "${ASSETS[@]}"; do
   printf '  %s  (%s)\n' "$name" "$(du -h "$path" | cut -f1)"
 done
 
+# A .dmg that is not signed, notarized and stapled is one macOS calls damaged and
+# refuses to open, because a browser download arrives quarantined (see
+# scripts/package-dmg.sh). Publishing one is worse than publishing nothing: the
+# download link works, so the failure surfaces on the user's machine instead of
+# in this build. package-dmg.sh only warns when its credentials are absent, so
+# the check that matters is on the artifact itself, not on which variables were
+# set.
+verify_dmg() {
+  local dmg="$1"
+  codesign --verify --strict "$dmg" >/dev/null 2>&1 || return 1
+  # Stapling is the proof of notarization, and the reason a first launch works
+  # with no network.
+  xcrun stapler validate "$dmg" >/dev/null 2>&1 || return 2
+  return 0
+}
+
 if [[ $PUBLISH -eq 1 ]]; then
+  for path in "${ASSETS[@]}"; do
+    [[ "$path" == *.dmg ]] || continue
+    if verify_dmg "$path"; then
+      echo "$(basename "$path") is signed, notarized and stapled."
+    elif [[ $ALLOW_UNSIGNED -eq 1 ]]; then
+      warn_unsigned "$path"
+    else
+      echo "error: $(basename "$path") is not signed and notarized, so macOS will" >&2
+      echo "       refuse to open it after a download. Not publishing it." >&2
+      echo >&2
+      echo "       Set MEERKAT_SIGN_IDENTITY and the notarization credentials" >&2
+      echo "       (MEERKAT_NOTARY_PROFILE, or MEERKAT_APPLE_ID +" >&2
+      echo "       MEERKAT_APPLE_PASSWORD + MEERKAT_TEAM_ID), or re-run with" >&2
+      echo "       --allow-unsigned if a broken download is genuinely what you want." >&2
+      exit 1
+    fi
+  done
+
   TAG="v$VERSION"
   step "Publishing to $TAG"
   if ! gh release view "$TAG" >/dev/null 2>&1; then

@@ -7,8 +7,36 @@ import {
   isLocalInstall,
 } from "../data/install.js";
 import InstallCommand from "./InstallCommand.jsx";
+import { useCopy } from "../hooks/useCopy.js";
 
 const OS_LABEL = { macos: "macOS", linux: "Linux" };
+
+// The two commands that install a downloaded file, with the visitor's own
+// filename already in them. Both are needed and neither is obvious: the tarball
+// is flat — install.sh, engine/ and the app sit at its top level — so it wants a
+// directory of its own, and `tar` will not create one for you.
+function DownloadSteps({ file }) {
+  const script = `mkdir -p meerkat && tar -xzf ~/Downloads/${file} -C meerkat\n./meerkat/install.sh`;
+  const { copy, label, state } = useCopy(script);
+
+  return (
+    <div className="dl-steps">
+      <div className="dl-steps-lines">
+        {script.split("\n").map((line) => (
+          <code key={line}>{line}</code>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={copy}
+        className={state === "copied" ? "done" : undefined}
+        aria-label="Copy the install commands"
+      >
+        {label}
+      </button>
+    </div>
+  );
+}
 
 // Two ways in, and the page does not decide which is right for you.
 //
@@ -128,17 +156,16 @@ export default function InstallChoice({ id, tone = "light" }) {
             </p>
           )}
 
+          {mine.length > 0 && <DownloadSteps file={mine[0].file} />}
+
           <p className="install-note dl-note">
             {os === "macos" ? (
               <>
-                Drag Meerkat to Applications. On first launch it offers to add the{" "}
-                <span>meerkat</span> command to your PATH.
+                Run them in Terminal, not the Finder — the Finder flags what it
+                unpacks and macOS then refuses to open the app.
               </>
             ) : (
-              <>
-                Unpack it anywhere, then run <span>./install.sh</span> inside — the same
-                install the command above performs.
-              </>
+              <>Same install as the command above.</>
             )}
           </p>
         </div>

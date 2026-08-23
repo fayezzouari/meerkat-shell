@@ -72,7 +72,7 @@ function useItems() {
 }
 
 // Subsequence match, the way a fuzzy finder works: "dlm" finds "download for
-// mac". Falls back to matching the hint so "dmg" finds it too.
+// mac". Falls back to matching the hint so "tar.gz" finds it too.
 function matches(item, query) {
   if (!query) return true;
   const needle = query.toLowerCase().replace(/\s+/g, "");

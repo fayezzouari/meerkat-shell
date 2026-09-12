@@ -834,10 +834,13 @@
         display: inline-flex;
         gap: 2px;
       }
+      /* The terminal's own font, from Preferences: the repo name reads as
+         part of the shell, not as a heading. */
       .vcs-repo {
         padding: 0 14px;
-        font-family: var(--font-display);
-        font-size: 16px;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        font-weight: 600;
         color: var(--text);
         overflow: hidden;
         text-overflow: ellipsis;

@@ -860,9 +860,123 @@
       }
       .vcs-actions {
         display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
+        align-items: center;
+        gap: 6px;
         padding: 0 12px 6px;
+      }
+      .vcs-actions-spacer {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .vcs-menu-wrap {
+        position: relative;
+        flex: 0 0 auto;
+      }
+      .vcs-btn-menu {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        flex: 0 0 auto;
+      }
+      .vcs-btn-menu-open {
+        color: var(--text);
+        border-color: var(--text-faint);
+      }
+      .vcs-menu-summary {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--accent);
+      }
+      .vcs-menu-chevron svg {
+        width: 11px;
+        height: 11px;
+        display: block;
+      }
+      .vcs-menu {
+        position: absolute;
+        top: calc(100% + 4px);
+        right: 0;
+        z-index: 20;
+        min-width: 230px;
+        padding: 4px;
+        background: var(--bg-raised);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      }
+      .vcs-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 6px 8px;
+        font-family: inherit;
+        font-size: 11.5px;
+        color: var(--text);
+        background: transparent;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        text-align: left;
+      }
+      .vcs-menu-item:hover {
+        background: var(--bg-hover);
+      }
+      .vcs-menu-item:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .vcs-menu-item:disabled:hover {
+        background: transparent;
+      }
+      .vcs-menu-icon {
+        flex: 0 0 auto;
+        display: inline-flex;
+        color: var(--text-dim);
+      }
+      .vcs-menu-label {
+        flex: 0 0 auto;
+      }
+      .vcs-menu-label b {
+        font-weight: 600;
+        color: var(--accent);
+      }
+      .vcs-menu-hint {
+        flex: 1 1 auto;
+        min-width: 0;
+        text-align: right;
+        font-size: 10px;
+        color: var(--text-faint);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .vcs-menu-sep {
+        height: 1px;
+        margin: 3px 6px;
+        background: var(--border);
+      }
+      /* Icon buttons: one stroke glyph, sized to the row. */
+      .vcs-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        padding: 0;
+      }
+      #vcs svg {
+        width: 13px;
+        height: 13px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        display: block;
       }
       .vcs-btn {
         flex: 1 1 auto;

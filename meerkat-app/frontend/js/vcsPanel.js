@@ -55,6 +55,28 @@ const STATUS_WORDS = {
   "?": "untracked",
 };
 
+// Stroke icons, 16px grid, coloured by currentColor. Inline so a button is one
+// element and the panel needs no icon font.
+const ICON = {
+  plus: `<svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>`,
+  minus: `<svg viewBox="0 0 16 16"><path d="M3 8h10"/></svg>`,
+  undo: `<svg viewBox="0 0 16 16"><path d="M3.5 7.5a5 5 0 1 1 1.4 4.2"/><path d="M3 3.5v4h4"/></svg>`,
+  check: `<svg viewBox="0 0 16 16"><path d="M3 8.5l3.2 3L13 4.5"/></svg>`,
+  trash: `<svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8h5.6l.7-8"/></svg>`,
+  pop: `<svg viewBox="0 0 16 16"><path d="M8 11V3.5M4.8 6.7L8 3.5l3.2 3.2"/><path d="M3 11.5v1.5h10v-1.5"/></svg>`,
+  down: `<svg viewBox="0 0 16 16"><path d="M8 3v8.5M4.5 8L8 11.5 11.5 8"/><path d="M3 13.5h10"/></svg>`,
+  up: `<svg viewBox="0 0 16 16"><path d="M8 13V4.5M4.5 8L8 4.5 11.5 8"/><path d="M3 2.5h10"/></svg>`,
+  sync: `<svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 0 1-8.7 3.4M3 8a5 5 0 0 1 8.7-3.4"/><path d="M11 2v3H8M5 14v-3h3"/></svg>`,
+  box: `<svg viewBox="0 0 16 16"><path d="M2.5 5.5h11v7.5h-11zM2.5 5.5l1.5-2.5h8l1.5 2.5M6.5 8.5h3"/></svg>`,
+  refresh: `<svg viewBox="0 0 16 16"><path d="M13 8A5 5 0 1 1 9.8 3.3"/><path d="M13 2.5v3.5H9.5"/></svg>`,
+  chevron: `<svg viewBox="0 0 16 16"><path d="M4 6.5l4 4 4-4"/></svg>`,
+  x: `<svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>`,
+};
+
+function iconBtn(act, icon, title, extra = "", cls = "") {
+  return `<button class="vcs-mini vcs-icon${cls ? " " + cls : ""}" data-act="${act}" ${extra} title="${escapeHtml(title)}">${ICON[icon]}</button>`;
+}
+
 function relativeTime(unixSeconds) {
   const delta = Math.max(0, Date.now() / 1000 - unixSeconds);
   if (delta < 60) return "now";
@@ -158,6 +180,7 @@ export function createVcsPanel(sessionManager) {
   let pendingDiscard = null; // key of the row awaiting confirmation
   let pendingStashDrop = null;
   let stashing = false;
+  let menuOpen = false;
   let commitMessage = "";
   let stashMessage = "";
 
@@ -174,7 +197,7 @@ export function createVcsPanel(sessionManager) {
   const collapsedDirs = new Set();
 
   function interacting() {
-    return Boolean(busy) || pendingDiscard !== null || pendingStashDrop !== null || stashing || textFocused();
+    return Boolean(busy) || pendingDiscard !== null || pendingStashDrop !== null || stashing || menuOpen || textFocused();
   }
 
   function textFocused() {
@@ -219,15 +242,22 @@ export function createVcsPanel(sessionManager) {
         : `<span class="vcs-file-dir">${escapeHtml(dir)}</span><span class="vcs-file-name">${escapeHtml(name)}</span>`;
     const from = f.origPath ? `<span class="vcs-file-from" title="renamed from ${escapeHtml(f.origPath)}">← ${escapeHtml(splitPath(f.origPath).name)}</span>` : "";
 
+    const pathAttr = `data-path="${escapeHtml(f.path)}"`;
     let buttons = "";
     if (kind === "staged") {
-      buttons = `<button class="vcs-mini" data-act="unstage" data-path="${escapeHtml(f.path)}" title="Unstage">−</button>`;
+      buttons = iconBtn("unstage", "minus", "Unstage", pathAttr);
     } else if (kind === "conflict") {
-      buttons = `<button class="vcs-mini" data-act="stage" data-path="${escapeHtml(f.path)}" title="Mark resolved (stage)">✓</button>`;
+      buttons = iconBtn("stage", "check", "Mark resolved (stage)", pathAttr);
     } else {
       buttons =
-        `<button class="vcs-mini" data-act="stage" data-path="${escapeHtml(f.path)}" title="Stage">+</button>` +
-        `<button class="vcs-mini vcs-mini-danger" data-act="discard" data-key="${escapeHtml(key)}" title="${kind === "new" ? "Delete this untracked file" : "Discard changes"}">↺</button>`;
+        iconBtn("stage", "plus", "Stage", pathAttr) +
+        iconBtn(
+          "discard",
+          kind === "new" ? "trash" : "undo",
+          kind === "new" ? "Delete this untracked file" : "Discard changes",
+          `data-key="${escapeHtml(key)}"`,
+          "vcs-mini-danger",
+        );
     }
 
     if (pendingDiscard === key) {
@@ -328,8 +358,8 @@ export function createVcsPanel(sessionManager) {
           <span class="vcs-commit-hash">${escapeHtml(s.ref)}</span>
           <span class="vcs-commit-subject">${escapeHtml(s.subject)}</span>
           <span class="vcs-row-actions">
-            <button class="vcs-mini" data-act="stash-pop" data-ref="${escapeHtml(s.ref)}" title="Pop: apply and drop">pop</button>
-            <button class="vcs-mini vcs-mini-danger" data-act="stash-drop" data-ref="${escapeHtml(s.ref)}" title="Drop without applying">×</button>
+            ${iconBtn("stash-pop", "pop", "Pop: apply and drop", `data-ref="${escapeHtml(s.ref)}"`)}
+            ${iconBtn("stash-drop", "trash", "Drop without applying", `data-ref="${escapeHtml(s.ref)}"`, "vcs-mini-danger")}
           </span>
         </div>`;
       })
@@ -359,17 +389,42 @@ export function createVcsPanel(sessionManager) {
     </div>`;
   }
 
+  // One dropdown for the remote operations and stash, rather than a row of
+  // buttons competing with the commit box for the panel's width. Each item
+  // names the git command it runs; the counts say why you would.
   function renderActions() {
     const s = status;
     const dis = busy ? "disabled" : "";
-    const remote = s.hasRemote ? "" : "disabled";
-    const remoteTitle = s.hasRemote ? "" : " — this repository has no remote";
+    const noRemote = !s.hasRemote;
+    const remoteHint = noRemote ? "no remote in this repository" : "";
+    const item = (act, icon, label, hint, disabled) =>
+      `<button class="vcs-menu-item" data-act="${act}" ${disabled ? "disabled" : ""}>
+        <span class="vcs-menu-icon">${ICON[icon]}</span>
+        <span class="vcs-menu-label">${label}</span>
+        <span class="vcs-menu-hint">${escapeHtml(hint)}</span>
+      </button>`;
+    const menu = menuOpen
+      ? `<div class="vcs-menu">
+          ${item("pull", "down", `Pull${s.behind ? ` <b>↓${s.behind}</b>` : ""}`, remoteHint || "git pull", noRemote)}
+          ${item("push", "up", `Push${s.ahead ? ` <b>↑${s.ahead}</b>` : ""}`, remoteHint || (s.upstream ? "git push" : "git push -u, sets the upstream"), noRemote)}
+          ${item("sync", "sync", "Sync", remoteHint || "pull, then push", noRemote)}
+          <div class="vcs-menu-sep"></div>
+          ${item("stash", "box", "Stash…", hasWorkingChanges() ? "stash push --include-untracked" : "nothing to stash", !hasWorkingChanges())}
+          <div class="vcs-menu-sep"></div>
+          ${item("refresh", "refresh", "Refresh", "re-read the checkout now", false)}
+        </div>`
+      : "";
+    const summary = [];
+    if (s.behind) summary.push(`↓${s.behind}`);
+    if (s.ahead) summary.push(`↑${s.ahead}`);
     return `<div class="vcs-actions">
-      <button class="vcs-btn" data-act="pull" ${dis} ${remote} title="git pull${remoteTitle}">Pull${s.behind ? ` ↓${s.behind}` : ""}</button>
-      <button class="vcs-btn" data-act="push" ${dis} ${remote} title="git push${s.upstream ? "" : " -u (sets the upstream)"}${remoteTitle}">Push${s.ahead ? ` ↑${s.ahead}` : ""}</button>
-      <button class="vcs-btn" data-act="sync" ${dis} ${remote} title="pull, then push${remoteTitle}">Sync</button>
-      <button class="vcs-btn" data-act="stash" ${dis} ${hasWorkingChanges() ? "" : "disabled"} title="git stash push --include-untracked">Stash</button>
-      <button class="vcs-btn vcs-btn-icon" data-act="refresh" ${dis} title="Refresh now">↻</button>
+      <span class="vcs-actions-spacer">${busy ? `<span class="vcs-hint">${escapeHtml(busy)}…</span>` : ""}</span>
+      <span class="vcs-menu-wrap">
+        <button class="vcs-btn vcs-btn-menu${menuOpen ? " vcs-btn-menu-open" : ""}" data-act="menu" ${dis} title="Pull, push, sync, stash">
+          ${summary.length ? `<span class="vcs-menu-summary">${summary.join(" ")}</span>` : ""}Actions <span class="vcs-menu-chevron">${ICON.chevron}</span>
+        </button>
+        ${menu}
+      </span>
     </div>`;
   }
 
@@ -407,7 +462,7 @@ export function createVcsPanel(sessionManager) {
     if (!result) return "";
     return `<div class="vcs-result vcs-result-${result.kind}">
       <pre>${escapeHtml(result.text)}</pre>
-      <button class="vcs-mini" data-act="dismiss" title="Dismiss">×</button>
+      ${iconBtn("dismiss", "x", "Dismiss")}
     </div>`;
   }
 
@@ -431,8 +486,8 @@ export function createVcsPanel(sessionManager) {
       return;
     }
 
-    const stageAllBtn = `<button class="vcs-mini" data-act="stage-all" title="Stage all changes and untracked files">+ all</button>`;
-    const unstageAllBtn = `<button class="vcs-mini" data-act="unstage-all" title="Unstage everything">− all</button>`;
+    const stageAllBtn = iconBtn("stage-all", "plus", "Stage all changes and untracked files");
+    const unstageAllBtn = iconBtn("unstage-all", "minus", "Unstage everything");
     const legend = status.localCount
       ? `<span class="vcs-legend"><span class="vcs-commit-mark vcs-commit-mark-local">●</span> ${status.localCount} not pushed</span>`
       : status.upstream
@@ -512,7 +567,11 @@ export function createVcsPanel(sessionManager) {
   async function handle(act, el) {
     const dataset = el?.dataset || {};
     switch (act) {
+      case "menu":
+        menuOpen = !menuOpen;
+        return render();
       case "refresh":
+        menuOpen = false;
         result = null;
         return refresh({ force: true });
       case "dismiss":
@@ -563,6 +622,7 @@ export function createVcsPanel(sessionManager) {
         });
       }
       case "stash":
+        menuOpen = false;
         stashing = true;
         return render();
       case "stash-cancel":
@@ -588,10 +648,13 @@ export function createVcsPanel(sessionManager) {
         pendingStashDrop = null;
         return run("dropping stash", () => vcs.stashDrop(cwd(), dataset.ref));
       case "pull":
+        menuOpen = false;
         return run("pulling", () => vcs.pull(cwd()));
       case "push":
+        menuOpen = false;
         return run("pushing", () => vcs.push(cwd()));
       case "sync":
+        menuOpen = false;
         return run("syncing", () => vcs.sync(cwd()));
     }
   }
@@ -724,6 +787,20 @@ export function createVcsPanel(sessionManager) {
     width = applyWidth(width);
   });
 
+  // The dropdown closes the way menus do: a click anywhere else, or Escape.
+  document.addEventListener("mousedown", (event) => {
+    if (menuOpen && !event.target.closest(".vcs-menu-wrap")) {
+      menuOpen = false;
+      render();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (menuOpen && event.key === "Escape") {
+      menuOpen = false;
+      render();
+    }
+  });
+
   // ── visibility ─────────────────────────────────────────────────────
 
   function open() {
@@ -737,6 +814,7 @@ export function createVcsPanel(sessionManager) {
 
   function close() {
     visible = false;
+    menuOpen = false;
     pendingDiscard = null;
     pendingStashDrop = null;
     stashing = false;

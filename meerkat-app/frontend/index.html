@@ -1165,14 +1165,14 @@
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--text-faint);
+        color: var(--text-dim);
         cursor: pointer;
         user-select: none;
       }
       .vcs-count {
-        font-weight: 500;
+        font-weight: 600;
         letter-spacing: 0;
-        color: var(--text-faint);
+        color: var(--text);
         background: var(--bg-hover);
         border-radius: 3px;
         padding: 0 4px;
@@ -1185,16 +1185,34 @@
         display: inline-block;
         width: 10px;
         font-size: 9px;
-        color: var(--text-faint);
+        color: var(--text-dim);
       }
       .vcs-row {
         display: flex;
         align-items: center;
         gap: 6px;
         margin: 0 6px;
-        padding: 3px 6px 3px calc(6px + var(--depth, 0) * 12px);
+        padding: 4px 6px 4px calc(6px + var(--depth, 0) * 14px);
         border-radius: 5px;
         min-width: 0;
+        color: var(--text);
+      }
+      /* Tree view: a guide line per level of nesting, so the eye can follow a
+         file back up to its folder without counting spaces. */
+      .vcs-file[style*="--depth"]:not([style*="--depth:0"]),
+      .vcs-dir[style*="--depth"]:not([style*="--depth:0"]) {
+        background-image: repeating-linear-gradient(
+          to right,
+          transparent 0,
+          transparent 11px,
+          var(--border) 11px,
+          var(--border) 12px,
+          transparent 12px,
+          transparent 14px
+        );
+        background-size: calc(var(--depth, 0) * 14px) 100%;
+        background-repeat: no-repeat;
+        background-position: 6px 0;
       }
       .vcs-file,
       .vcs-dir,
@@ -1213,12 +1231,12 @@
         color: var(--text);
       }
       .vcs-status {
-        flex: 0 0 14px;
+        flex: 0 0 16px;
         font-family: var(--font-mono);
-        font-size: 10.5px;
-        font-weight: 700;
+        font-size: 11px;
+        font-weight: 800;
         text-align: center;
-        color: var(--text-faint);
+        color: var(--text-dim);
       }
       .vcs-status-M,
       .vcs-status-T {
@@ -1242,7 +1260,7 @@
         align-items: baseline;
         gap: 4px;
         font-family: var(--font-mono);
-        font-size: 11px;
+        font-size: 11.5px;
         overflow: hidden;
         white-space: nowrap;
       }
@@ -1251,12 +1269,14 @@
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
-        color: var(--text-faint);
+        color: var(--text-dim);
         direction: rtl;
         text-align: left;
       }
       .vcs-file-name {
         flex: 0 0 auto;
+        font-weight: 600;
+        color: var(--text);
       }
       .vcs-file-from {
         flex: 0 1 auto;
@@ -1268,8 +1288,9 @@
       }
       .vcs-dir-name {
         font-family: var(--font-mono);
-        font-size: 11px;
-        color: var(--text-faint);
+        font-size: 11.5px;
+        font-weight: 500;
+        color: var(--text-dim);
       }
       .vcs-row-actions {
         flex: 0 0 auto;
@@ -1386,7 +1407,8 @@
         flex: 0 0 auto;
         font-family: var(--font-mono);
         font-size: 10.5px;
-        color: var(--text-faint);
+        font-weight: 600;
+        color: var(--text-dim);
       }
       .vcs-commit-subject {
         flex: 1 1 auto;
@@ -1394,6 +1416,11 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        font-weight: 500;
+        color: var(--text);
+      }
+      .vcs-commit:not(.vcs-commit-local) .vcs-commit-subject {
+        color: var(--text-dim);
       }
       .vcs-commit-time {
         flex: 0 0 auto;

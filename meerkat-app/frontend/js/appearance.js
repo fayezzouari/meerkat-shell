@@ -23,11 +23,10 @@ export const FONT_SIZE_MAX = 24;
 export const OPACITY_MIN = 0.3;
 
 // backgroundImagePath is a filesystem path, with two reserved values: this
-// sentinel for the shipped Meerkat mark, and "" for no image. A sentinel
-// rather than the asset URL, so the bundled file can move without
-// invalidating stored settings.
+// sentinel for the shipped Meerkat mark, and "" for no image. The mark is not
+// a CSS image at all — backdrop.js paints it as an animated dot-field canvas
+// — so the sentinel never resolves to a URI here.
 export const DEFAULT_BACKGROUND = "__meerkat__";
-const DEFAULT_BACKGROUND_URI = "/assets/meerkat-logo.png";
 
 const DEFAULTS = {
   opacity: 1,
@@ -120,9 +119,6 @@ function apply() {
   root.setProperty("--surface-raised", withAlpha(theme.chrome.bgRaised, s.opacity));
   root.setProperty("--font-mono", fontStackFor(s.fontFamily));
   root.setProperty("--bg-image", backgroundImageURI ? `url("${backgroundImageURI}")` : "none");
-  // The bundled logo is a mark: fixed small size, centered. A user's own
-  // wallpaper is a photo and wants to fill the window.
-  root.setProperty("--bg-image-size", s.backgroundImagePath === DEFAULT_BACKGROUND ? "220px auto" : "cover");
 
   subscribers.forEach((fn) => fn());
 }
@@ -137,8 +133,8 @@ async function loadBackgroundImage() {
     return;
   }
   if (path === DEFAULT_BACKGROUND) {
-    // Bundled asset — same origin, so no trip through Go.
-    backgroundImageURI = DEFAULT_BACKGROUND_URI;
+    // Drawn by backdrop.js, not by CSS.
+    backgroundImageURI = "";
     backgroundImageError = "";
     return;
   }

@@ -41,11 +41,33 @@ defmodule MeerkatDaemon.ShellEnvTest do
   end
 
   describe "exec_env/1" do
-    test "lays extras over the base and yields charlist pairs" do
+    test "lays extras over the base and yields binary pairs" do
       env = Map.new(ShellEnv.exec_env([{"PAGER", "cat"}]))
-      assert env[~c"PAGER"] == ~c"cat"
-      assert is_list(env[~c"TERM"])
-      assert env[~c"PATH"] != nil
+      assert env["PAGER"] == "cat"
+      assert is_binary(env["TERM"])
+      assert env["PATH"] != nil
+      assert Enum.all?(ShellEnv.exec_env(), fn {k, v} -> is_binary(k) and is_binary(v) end)
+    end
+
+    test "erlexec accepts it: empty and non-Latin-1 values included" do
+      # The regression: a value with a character past Latin-1 (an em dash in a
+      # prompt variable) or an empty one made erlexec refuse the whole env — and
+      # with it every foreground command. Prove a command actually runs.
+      env =
+        ShellEnv.exec_env([
+          {"MEERKAT_EMPTY", ""},
+          {"MEERKAT_UNICODE", "café — 🦡"},
+          {"MEERKAT_PROBE", "yes"}
+        ])
+
+      {:ok, [stdout: out]} =
+        :exec.run(
+          ~c"printf '%s|%s|%s' \"$MEERKAT_PROBE\" \"${MEERKAT_EMPTY-unset}\" \"$MEERKAT_UNICODE\"",
+          [:sync, :stdout, {:env, env}]
+        )
+
+      # Empty arrives as unset: erlexec has no encoding for "set to nothing".
+      assert IO.iodata_to_binary(out) == "yes|unset|café — 🦡"
     end
   end
 
@@ -53,7 +75,7 @@ defmodule MeerkatDaemon.ShellEnvTest do
     test "captures the login shell's environment" do
       assert :ok = ShellEnv.load()
       env = Map.new(ShellEnv.exec_env())
-      assert env[~c"HOME"] == String.to_charlist(System.get_env("HOME"))
+      assert env["HOME"] == System.get_env("HOME")
     end
   end
 end

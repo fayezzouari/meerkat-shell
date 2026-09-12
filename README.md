@@ -235,13 +235,14 @@ wails dev
 
 ## Current limitations
 
-- **No pty allocation yet** — commands that check "is this a real
-  terminal" (`ls --color`, `git diff`, `vim`, `htop`, `less`) render as if
-  piped to a file, since the daemon execs through erlexec without a pty
-  option enabled yet. Both frontends are ready to render full ANSI output
-  the moment the daemon produces it.
-- **No raw Ctrl+Z/Ctrl+C capture** — job control (`stop`/`bg`/`fg`) is
-  driven by typed commands today; wiring real keystroke capture in the
-  clients is the natural next step.
+- **The command line has no raw mode.** In the GUI every foreground command
+  gets a real pty: `ssh`, `vim`, `htop`, `less`, `git diff` with colour, a
+  password prompt, all behave as in any terminal, and Ctrl+C reaches the
+  running program. `meerkat-cli` speaks the same protocol but never puts your
+  terminal into raw mode, so full-screen programs and interactive prompts are
+  GUI-only for now.
+- **One pty per pane, shared by its commands** — deliberate (see the daemon's
+  README: it is what lets `sudo` remember you), but it means a background job
+  started with `&` has no terminal at all.
 
 See each component's README for its own roadmap in more detail.

@@ -55,13 +55,22 @@ defmodule MeerkatDaemon.ShellEnv do
   The cached environment as erlexec's `{:env, ...}` list, with `extra` laid on
   top. Falls back to the engine's own environment if `load/0` never ran.
   """
-  @spec exec_env([{String.t(), String.t()}]) :: [{charlist(), charlist()}]
+  #
+  # Binaries, not charlists, on both sides. erlexec decodes a value as a string
+  # only if ei encoded it as one, and a charlist with a code point past Latin-1
+  # (an em dash in a prompt variable, an emoji) is encoded as a plain list —
+  # "invalid env argument", and with it every foreground command failed. A
+  # binary is the UTF-8 bytes and always decodes. An empty value comes through
+  # as "unset" rather than "set to nothing", which erlexec gives no way to say;
+  # no command that matters tells those apart.
+  @spec exec_env([{String.t(), String.t()}]) :: [{binary(), binary()}]
   def exec_env(extra \\ []) do
     base = :persistent_term.get(@key, nil) || with_defaults(System.get_env())
 
     extra
     |> Enum.reduce(base, fn {k, v}, acc -> Map.put(acc, k, v) end)
-    |> Enum.map(fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
+    |> Enum.reject(fn {k, _} -> k == "" or String.contains?(k, "=") end)
+    |> Enum.map(fn {k, v} -> {k, v} end)
   end
 
   @doc false

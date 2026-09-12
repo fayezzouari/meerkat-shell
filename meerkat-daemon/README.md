@@ -121,12 +121,9 @@ daemon or other sessions.
    `meerkat-app`) capturing raw keystrokes and translating
    `Ctrl+Z`/`Ctrl+C` into the equivalent daemon calls automatically,
    the way a real shell does.
-2. **pty allocation** — erlexec supports a `:pty` option we're not
-   using yet. Without it, programs that check "is this a real
-   terminal" (`ls --color`, `git diff`, `vim`, `htop`, `less`) behave
-   as if piped to a file. This is also what `meerkat-app`'s xterm.js
-   frontend is fully ready to render the moment the daemon produces
-   real ANSI output.
+2. **A pty for background jobs** — foreground commands have one (the
+   `Terminal` module above), background jobs started with `&` do not,
+   so a server that insists on a tty has to run in the foreground.
 3. **Structured pipes** — a `|>` token whose stages receive decoded
    Elixir terms (JSON/CSV/lines) instead of raw bytes.
 4. **Durable scheduling** — `every`/`at` blocks backed by

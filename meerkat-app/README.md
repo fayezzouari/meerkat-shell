@@ -69,11 +69,11 @@ frontend (xterm.js)  <—events/methods—>  app.go  <—socket—>  meerkat-dae
 - `app.go` — `SendLine(line string)` is exposed to JS as
   `window.go.main.App.SendLine(...)`; every raw line the daemon sends
   back gets forwarded to JS as a `daemon:line` event.
-- `frontend/main.js` — the only place that interprets the `O:`/`E:`/
-  `D:`/`X:` protocol prefixes, and the only place doing local line
-  editing (echo, backspace) — see the comment in that file for why:
-  the daemon doesn't allocate a pty yet, so there's no kernel tty
-  driver doing that for us.
+- `frontend/js/session.js` — interprets the `O:`/`E:`/`D:`/`X:` protocol
+  prefixes and owns the two input modes: local line editing while at the
+  prompt (echo, backspace, completion, history), and raw keystroke
+  forwarding to the command's pty once one is running — which is what
+  makes `ssh`, `vim` and a password prompt work.
 - `frontend/js/backdrop.js` — the default window background: the
   Meerkat mark rendered as an animated Ben-Day dot field by
   [Benday](https://github.com/KacemMathlouthi/benday). Benday ships as
@@ -185,23 +185,22 @@ with a banner naming any merge, rebase, cherry-pick or revert in progress.
 `git log` plus `git rev-list <upstream>..HEAD` for the pushed/local split, and
 one git invocation per button.
 
-## Known limitation: no pty yet
+## Terminals, ssh and full-screen programs
 
-Programs that check "is this a real terminal" — `ls --color`,
-`git diff`, `vim`, `htop`, `less` — will render as if piped to a file,
-because `meerkat-daemon` currently execs commands through a plain
-`Port`, not a pty. xterm.js is fully capable of rendering full ANSI
-output the moment the daemon produces it; this is purely a
-daemon-side gap. It's the same `erlexec` swap already on
-`meerkat-daemon`'s roadmap for job control (`Ctrl+Z`/`bg`/`fg`) —
-worth doing sooner if you're using this GUI daily, since `erlexec`'s
-pty option solves both at once.
+Every foreground command runs on the pane's pty (see the daemon's
+`Terminal` module), so anything that asks "is this a real terminal"
+gets a yes: `ssh user@host` opens an interactive session, `vim`,
+`htop` and `less` draw full-screen, `git diff` colours, `sudo` and
+`ssh` password prompts read from the keyboard. While a command runs,
+keystrokes go to it raw — `Ctrl+C` interrupts it, arrows and
+function keys arrive as the escape sequences it expects — and the
+window's size follows the pane, so a resize reaches the program as
+`SIGWINCH`. Commands run with your login shell's environment (PATH,
+`SSH_AUTH_SOCK`, `TERM`), so key agents and tools from `~/.local/bin`
+work the same as in Terminal.app.
 
 ## What's next
 
-- Wire real pty support once the daemon side has it — swap local line
-  editing for raw keystroke-per-keystroke forwarding, dropping the
-  "fake cooked mode" in `main.js`.
 - Multiple tabs/panes — each would be its own `daemonclient.Client`
   talking to the same daemon, since jobs/state already live
   server-side, not in this window.

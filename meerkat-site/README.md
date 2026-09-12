@@ -152,8 +152,12 @@ What lands where, with `~/.meerkat` as the default prefix:
 Both wrappers start the engine before connecting, rather than relying on the
 client's own spawn — a first cold start reads the whole OTP release off disk and
 can outlast the client's wait. Checksums are verified against the `.sha256`
-published beside each tarball; a mismatch aborts. `sh -s -- --uninstall`
-reverses it, leaving your socket and logs alone.
+published beside each tarball; a mismatch aborts. Re-running the script upgrades:
+it reads the version from GitHub's redirect before downloading, stops if that is
+what is already installed, refuses to downgrade, and otherwise installs the new
+version beside the old, swaps `current`, and stops the old engine. Settings are
+untouched. `--reinstall` forces it; `sh -s -- --uninstall` reverses it, leaving
+your socket and logs alone.
 
 Releases are built per platform (the engine ships a compiled OTP release and
 erlexec builds a C++ port program), so a Linux tarball has to be built on Linux.

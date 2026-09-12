@@ -19,13 +19,19 @@
 # Run from beside an unpacked release it uses what is there; run from anywhere
 # else, or piped from curl, it downloads. That is the same install either way.
 #
+# Re-running it is safe. If the version on offer is the one already installed
+# it says so and stops; if it is newer it upgrades in place, keeping your
+# settings (themes, key bindings, ~/.meerkat) and stopping the old engine so the
+# new one takes over. It refuses to downgrade. --reinstall overrides both.
+#
 # Environment:
 #   MEERKAT_DOWNLOAD_URL  directory holding the release assets
 #   MEERKAT_BASE_URL      a site serving them under /downloads/latest
 #   MEERKAT_PREFIX        where to install (default $HOME/.meerkat)
 #
 # Flags (after `sh -s --`):
-#   --downloads URL, --base URL, --from DIR, --prefix DIR, --no-verify, --uninstall
+#   --downloads URL, --base URL, --from DIR, --prefix DIR, --no-verify,
+#   --reinstall, --uninstall
 set -eu
 
 DEFAULT_DOWNLOAD_URL="https://github.com/fayezzouari/meerkat-shell/releases/latest/download"
@@ -38,6 +44,7 @@ fi
 PREFIX="${MEERKAT_PREFIX:-$HOME/.meerkat}"
 VERIFY=1
 UNINSTALL=0
+REINSTALL=0
 
 # An unpacked release beside this script is the one it should install, without
 # asking the network for a copy of what is already on disk. Guarded on
@@ -55,9 +62,10 @@ while [ $# -gt 0 ]; do
     --from)      FROM="${2:?--from needs a directory}"; shift 2 ;;
     --prefix)    PREFIX="${2:?--prefix needs a directory}"; shift 2 ;;
     --no-verify) VERIFY=0; shift ;;
+    --reinstall) REINSTALL=1; shift ;;
     --uninstall) UNINSTALL=1; shift ;;
     -h|--help)
-      sed -n '2,28p' "$0" 2>/dev/null || echo "see https://meerkat.fayez-zouari.tn/install.sh"
+      sed -n '2,34p' "$0" 2>/dev/null || echo "see https://meerkat.fayez-zouari.tn/install.sh"
       exit 0 ;;
     *) echo "error: unknown option '$1'" >&2; exit 2 ;;
   esac
@@ -77,6 +85,55 @@ step() { printf '%s==>%s %s\n' "$B" "$R" "$1"; }
 die()  { printf 'error: %s\n' "$1" >&2; exit 1; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
+
+# ── versions ─────────────────────────────────────────────────────────
+
+# What is installed now, if anything. The VERSION file is authoritative; the
+# symlink's target is the fallback for an install old enough not to have one.
+installed_version() {
+  [ -e "$CURRENT" ] || return 1
+  v="$(cat "$CURRENT/VERSION" 2>/dev/null || basename "$(readlink "$CURRENT")")"
+  [ -n "$v" ] && [ "$v" != unknown ] && printf '%s\n' "$v"
+}
+
+# vercmp A B prints lt, eq or gt, comparing dot-separated numbers so that
+# 0.10.0 is newer than 0.9.0. Anything non-numeric compares as 0.
+vercmp() {
+  a="$1." b="$2."
+  while [ -n "$a" ] || [ -n "$b" ]; do
+    x="${a%%.*}"; a="${a#*.}"
+    y="${b%%.*}"; b="${b#*.}"
+    case "$x" in ''|*[!0-9]*) x=0 ;; esac
+    case "$y" in ''|*[!0-9]*) y=0 ;; esac
+    [ "$x" -lt "$y" ] && { echo lt; return; }
+    [ "$x" -gt "$y" ] && { echo gt; return; }
+  done
+  echo eq
+}
+
+# Decides whether installing $1 over what is here is a no-op, an upgrade, or a
+# downgrade, and acts on the first and last. Called twice on a download: once
+# with the version the redirect names, before fetching anything, and once with
+# the VERSION file from the archive, which is the one that counts. Both are
+# harmless to repeat.
+INSTALLED="$(installed_version 2>/dev/null || true)"
+UPGRADING=0
+check_version() {
+  new="$1"
+  [ -n "$INSTALLED" ] && [ -n "$new" ] && [ "$new" != unknown ] || return 0
+  [ "$REINSTALL" -eq 1 ] && return 0
+  case "$(vercmp "$new" "$INSTALLED")" in
+    eq)
+      say "${B}Meerkat $INSTALLED is already installed and up to date.$R"
+      say "${D}Pass --reinstall to install it again anyway.$R"
+      exit 0 ;;
+    lt)
+      die "Meerkat $INSTALLED is installed, which is newer than $new.
+Refusing to downgrade. Pass --reinstall if you mean it." ;;
+    gt)
+      UPGRADING=1 ;;
+  esac
+}
 
 # ── uninstall ────────────────────────────────────────────────────────
 
@@ -149,6 +206,20 @@ if [ -n "$FROM" ]; then
   step "Installing from $FROM"
   SRC="$FROM"
 else
+  # GitHub answers releases/latest/download/... with a redirect that names the
+  # tag, which is enough to know before pulling tens of megabytes whether there
+  # is anything to do. Any other host, or a failed probe, just means the check
+  # happens after the download instead.
+  probe_version() {
+    if have curl; then
+      loc="$(curl -sI "$ASSET_URL" 2>/dev/null | tr -d '\r' | sed -n 's/^[Ll]ocation: *//p' | head -1)"
+    else
+      loc="$(wget --spider -S --max-redirect=0 "$ASSET_URL" 2>&1 | tr -d '\r' | sed -n 's/^ *[Ll]ocation: *//p' | head -1)"
+    fi
+    printf '%s\n' "$loc" | sed -n 's#.*/download/v\{0,1\}\([0-9][0-9.]*\)/.*#\1#p'
+  }
+  check_version "$(probe_version || true)"
+
   step "Downloading $ASSET"
   say "${D}from $ASSET_URL$R"
   fetch "$ASSET_URL" "$TMP/$ASSET" || die "could not download $ASSET_URL
@@ -184,10 +255,19 @@ fi
 
 VERSION="$(cat "$SRC/VERSION" 2>/dev/null || echo unknown)"
 TARGET="$VERSIONS_DIR/$VERSION"
+check_version "$VERSION"
 
 # ── install ──────────────────────────────────────────────────────────
 
-step "Installing $VERSION into $PREFIX"
+if [ "$UPGRADING" -eq 1 ]; then
+  step "Upgrading $INSTALLED -> $VERSION in $PREFIX"
+  say "${D}Your settings are kept: the app's themes and key bindings live in its own"
+  say "data store, and nothing in $PREFIX besides the program files is touched.$R"
+  OLD_ENGINE="$VERSIONS_DIR/$INSTALLED/engine/bin/meerkat_daemon"
+else
+  step "Installing $VERSION into $PREFIX"
+  OLD_ENGINE=""
+fi
 mkdir -p "$VERSIONS_DIR" "$BIN_DIR"
 
 # Replace an existing copy of this version rather than merging into it, so a
@@ -325,10 +405,26 @@ EOF
   APP_INSTALLED=1
 fi
 
+# An engine from the previous version keeps running, and keeps answering, until
+# something stops it — so without this an upgrade changes what `meerkat` is
+# while every command still runs on the old engine. Stopping it ends any
+# background jobs it holds, which is said rather than done silently. The next
+# `meerkat` or `meerkat-app` starts the new one.
+if [ -n "$OLD_ENGINE" ] && [ -x "$OLD_ENGINE" ] && "$OLD_ENGINE" pid >/dev/null 2>&1; then
+  step "Stopping the $INSTALLED engine"
+  say "${D}Background jobs it was running end with it. The $VERSION engine starts"
+  say "the next time you open meerkat or the app.$R"
+  MEERKAT_SOCK="${MEERKAT_SOCK:-$HOME/.meerkat/meerkat.sock}" "$OLD_ENGINE" stop >/dev/null 2>&1 || true
+fi
+
 # ── what to do next ──────────────────────────────────────────────────
 
 say ""
-say "${B}Meerkat $VERSION is installed.$R"
+if [ "$UPGRADING" -eq 1 ]; then
+  say "${B}Meerkat $VERSION is installed (was $INSTALLED).$R"
+else
+  say "${B}Meerkat $VERSION is installed.$R"
+fi
 say ""
 
 case ":$PATH:" in

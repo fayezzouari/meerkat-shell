@@ -67,6 +67,15 @@ the engine's job control is [erlexec](https://github.com/saleyn/erlexec), whose
 port program is POSIX (`fork`/`execve`/`setsid`/`termios`) and has no Windows
 target.
 
+Running it again is how you upgrade. The installer compares the version on
+offer with the one in `~/.meerkat/current`: the same version says so and stops,
+a newer one is installed alongside and `current` is swapped over, and a running
+engine from the old version is stopped so the next `meerkat` starts the new one.
+Your settings survive — the app keeps themes, key bindings and appearance in its
+own WebKit data store, keyed by bundle id rather than by install, and nothing in
+`~/.meerkat` besides the program files is touched. It refuses to downgrade;
+`sh -s -- --reinstall` overrides both that and the up-to-date check.
+
 Or take a file instead. Every platform ships the same thing, a tarball with
 `install.sh` inside it, so an unpacked release installs itself with no network.
 Two commands, from Terminal:

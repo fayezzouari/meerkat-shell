@@ -61,6 +61,12 @@ export function killJobById(jobId) {
 }
 
 // Jobs are daemon-wide, not per-session.
+// Which engine this app is talking to — see EngineInfo in app.go. Resolves
+// with reachable: false when nothing answers on the expected socket.
+export function engineInfo() {
+  return window.go.main.App.EngineInfo();
+}
+
 export function listJobs() {
   return window.go.main.App.ListJobs();
 }

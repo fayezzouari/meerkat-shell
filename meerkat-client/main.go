@@ -21,7 +21,7 @@ import (
 )
 
 // Mirrors MeerkatDaemon.Evaluator's @builtins, for completion only.
-var builtins = []string{"cd", "exit", "quit", "jobs", "fg", "bg", "kill", "stop"}
+var builtins = []string{"cd", "exit", "quit", "jobs", "fg", "bg", "kill", "stop", "engine"}
 
 // Wire protocol: 4-byte big-endian length prefix, then a payload whose first
 // byte is a type tag — meerkat-daemon's `packet: 4` socket. This client speaks
@@ -32,6 +32,7 @@ const (
 	msgStdout = 'O'
 	msgStderr = 'E'
 	msgCwd    = 'D'
+	msgHello  = 'H' // which engine answered, right after the first cwd
 	msgPty    = 'P'
 	msgExit   = 'X'
 )
@@ -62,6 +63,11 @@ func readFrame(r *bufio.Reader) (msgType byte, payload []byte, ok bool) {
 	return buf[0], buf[1:], true
 }
 
+// socketPath is where this client expects its engine. Beside an engine — the
+// release layout, where meerkat-cli and engine/ share a directory — that is
+// meerkat.sock. A `go run` from a checkout has no engine beside it and uses
+// dev.sock, where `mix run` listens, so a developer's client and their
+// installed one never meet on the same path. MEERKAT_SOCK overrides both.
 func socketPath() string {
 	if p := os.Getenv("MEERKAT_SOCK"); p != "" {
 		return p
@@ -70,7 +76,49 @@ func socketPath() string {
 	if err != nil {
 		return "/tmp/meerkat.sock"
 	}
-	return filepath.Join(u.HomeDir, ".meerkat", "meerkat.sock")
+	name := "dev.sock"
+	if besideEngine() || os.Getenv("MEERKAT_START_CMD") != "" {
+		name = "meerkat.sock"
+	}
+	return filepath.Join(u.HomeDir, ".meerkat", name)
+}
+
+func besideEngine() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	_, err = os.Stat(filepath.Join(filepath.Dir(exe), "engine", "bin", "meerkat_daemon"))
+	return err == nil
+}
+
+// probe connects without starting anything and prints what answers: the
+// engine's identity line, or nothing. Exit 0 if something is listening. This
+// is what the meerkat-engine wrapper asks before it dares remove a socket.
+func probe(path string) int {
+	conn, err := dial(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "meerkat-client: nothing is listening on", path)
+		return 1
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(2 * time.Second))
+	r := bufio.NewReader(conn)
+	for i := 0; i < 4; i++ {
+		msgType, payload, ok := readFrame(r)
+		if !ok {
+			break
+		}
+		if msgType == msgHello {
+			fmt.Println(string(payload))
+			return 0
+		}
+	}
+	fmt.Println("an engine is listening on", path, "but did not identify itself (older version)")
+	return 0
 }
 
 func historyPath() string {
@@ -106,6 +154,9 @@ func ensureDaemon(path string) (net.Conn, error) {
 	cmdStr, dir := startCmd()
 	cmd := exec.Command("sh", "-c", cmdStr)
 	cmd.Dir = dir
+	// Told which socket in so many words: the engine's own default depends on
+	// how it was built, and a release derives its node name from the path.
+	cmd.Env = append(os.Environ(), "MEERKAT_SOCK="+path)
 	// New session, no controlling terminal, so the daemon outlives this
 	// client and survives Ctrl+C in the shell tab.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
@@ -133,6 +184,9 @@ func ensureDaemon(path string) (net.Conn, error) {
 
 func main() {
 	path := socketPath()
+	if len(os.Args) > 1 && os.Args[1] == "--probe" {
+		os.Exit(probe(path))
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		fmt.Fprintln(os.Stderr, "meerkat-client: cannot create", filepath.Dir(path), err)
 		os.Exit(1)

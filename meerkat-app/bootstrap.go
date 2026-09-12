@@ -139,21 +139,33 @@ func writeWrappers(binDir, engine string) error {
 ` + wrapperTag + `
 set -eu
 ENGINE=` + shellQuote(engine) + `
+CLI=` + shellQuote(cli) + `
 SOCK="${MEERKAT_SOCK:-$HOME/.meerkat/meerkat.sock}"
 export MEERKAT_SOCK="$SOCK"
 
+# Two questions, not one. "Is our release's node up" is what pid answers, and
+# it is blind to any other engine — a checkout's mix run, another install —
+# holding the same socket. "Is anything answering on the socket" is what the
+# probe answers, and it is what decides whether the path may be touched.
 running() { "$ENGINE" pid >/dev/null 2>&1; }
+answering() { "$CLI" --probe >/dev/null 2>&1; }
 
 case "${1:-status}" in
   start)
     if running; then echo "Already running."; exit 0; fi
+    if answering; then
+      echo "Another engine is already listening on $SOCK; using it:"
+      "$CLI" --probe | sed 's/^/  /'
+      exit 0
+    fi
     # The OS refuses to bind a unix socket past ~104 characters, and says
     # nothing about length in the error it gives back.
     if [ ${#SOCK} -gt 100 ]; then
       echo "error: MEERKAT_SOCK is ${#SOCK} characters; the limit is about 100." >&2
       exit 1
     fi
-    # A socket file outlives the process that bound it.
+    # A socket file outlives the process that bound it — and nothing answered
+    # on this one, so it is a leftover.
     [ -S "$SOCK" ] && rm -f "$SOCK"
     mkdir -p "$(dirname "$SOCK")"
     "$ENGINE" daemon
@@ -183,7 +195,10 @@ case "${1:-status}" in
     running || { echo "Not running."; exit 0; }
     "$ENGINE" stop && echo "Engine stopped." ;;
   restart) "$0" stop; "$0" start ;;
-  status)  running && echo "Running. Socket: $SOCK" || echo "Not running." ;;
+  status)
+    if running; then echo "Running. Socket: $SOCK"; "$CLI" --probe 2>/dev/null | sed 's/^/  /'
+    elif answering; then echo "Not ours, but an engine is listening on $SOCK:"; "$CLI" --probe | sed 's/^/  /'
+    else echo "Not running."; fi ;;
   *) echo "usage: meerkat-engine [start|stop|restart|status]" >&2; exit 2 ;;
 esac
 `

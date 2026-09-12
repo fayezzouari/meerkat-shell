@@ -181,8 +181,21 @@ client -> daemon:  one line of shell input
 daemon -> client:  "O:<text>"  one stdout line
                     "E:<text>"  one stderr line
                     "D:<cwd>"   sent on connect, and again if cwd changed
+                    "H:<id>"    sent once after the first D: which engine this is
                     "X:<code>"  terminates this command's response
 ```
+
+The `H` line is `version=… flavor=… instance=… pid=… node=… sock=…` — the
+flavor is `release` for an installed engine and `dev` for a `mix run`, and the
+instance is a random id minted at boot. It exists because two engines can be on
+one machine: the installed one on `~/.meerkat/meerkat.sock` and a checkout's on
+`~/.meerkat/dev.sock`, each pairing with the frontends built the same way. The
+`engine` builtin prints the same thing; the GUI's sidebar shows it next to the
+job table; `meerkat-cli --probe` asks a socket without starting anything, which
+is what `meerkat-engine start` does before it will touch a socket file — an
+engine never replaces another's live socket, it refuses and says whose it is.
+Releases derive their node name from the socket path (`rel/env.sh.eex`), so
+two installs can run at once too.
 
 ## Getting started
 

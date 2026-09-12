@@ -8,7 +8,10 @@ DAEMON_DIR="$SCRIPT_DIR/meerkat-daemon"
 APP_BUNDLE="$APP_DIR/build/bin/meerkat-app.app"
 APP_BINARY="$APP_DIR/build/bin/meerkat-app"
 
-SOCK_PATH="${MEERKAT_SOCK:-$HOME/.meerkat/meerkat.sock}"
+# dev.sock, not meerkat.sock: that is where a `mix run` engine listens by
+# default and where an app built from this checkout looks, so a copy installed
+# from a release — on meerkat.sock, with its own engine — can run alongside.
+SOCK_PATH="${MEERKAT_SOCK:-$HOME/.meerkat/dev.sock}"
 LOG_PATH="$(dirname "$SOCK_PATH")/daemon.log"
 
 if ! command -v wails >/dev/null 2>&1; then
@@ -72,7 +75,9 @@ wails build
 
 echo "Launching meerkat-app..."
 if [[ "$(uname)" == "Darwin" && -d "$APP_BUNDLE" ]]; then
-  open "$APP_BUNDLE"
+  # `open` drops the environment; --env carries the one variable that matters,
+  # so a custom MEERKAT_SOCK reaches the app as well as the engine above.
+  open --env "MEERKAT_SOCK=$SOCK_PATH" "$APP_BUNDLE"
 elif [[ -x "$APP_BINARY" ]]; then
   "$APP_BINARY"
 else

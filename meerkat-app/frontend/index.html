@@ -309,6 +309,17 @@
       .wt-tag-stale {
         color: var(--danger);
       }
+      /* A dev engine is the one you can lose track of; it gets the accent. */
+      .wt-tag-dev {
+        color: var(--accent);
+      }
+      .engine-id {
+        margin-left: 3px;
+        font-family: var(--font-mono);
+        letter-spacing: 0;
+        text-transform: none;
+        opacity: 0.8;
+      }
       /* Kept out of the layout until hover so the row doesn't reflow, and so a
          mis-aimed click on a resting row can't start a removal. */
       .wt-remove {

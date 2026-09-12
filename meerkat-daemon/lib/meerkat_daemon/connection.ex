@@ -37,7 +37,7 @@ defmodule MeerkatDaemon.Connection do
   """
   use GenServer
   require Logger
-  alias MeerkatDaemon.{Parser, Evaluator, JobManager, Ports, Terminal}
+  alias MeerkatDaemon.{Parser, Evaluator, Identity, JobManager, Ports, Terminal}
 
   def start_link(socket), do: GenServer.start_link(__MODULE__, socket)
 
@@ -69,6 +69,9 @@ defmodule MeerkatDaemon.Connection do
   def handle_info(:socket_ready, state) do
     :inet.setopts(state.socket, active: :once)
     send_frame(state.socket, ?D, state.cwd)
+    # After the cwd, not before: clients that predate it read the first frame
+    # as the cwd, and those that know it pick it up from the stream.
+    send_frame(state.socket, ?H, Identity.line())
     {:noreply, state}
   end
 

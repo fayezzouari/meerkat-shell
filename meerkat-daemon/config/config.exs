@@ -12,6 +12,10 @@ if System.get_env("USER") == "root" or match?({"0\n", 0}, System.cmd("id", ["-u"
   config :erlexec, root: true, user: "root", limit_users: ["root"]
 end
 
+# Which kind of engine this is, for Identity: a release (prod) or a dev/test
+# run from a checkout. Baked in at build time, which is what makes it true.
+config :meerkat_daemon, flavor: config_env()
+
 # Per-environment overrides. Only test has any, but the import has to be here
 # for it to be read at all.
 if File.exists?(Path.join(__DIR__, "#{config_env()}.exs")) do

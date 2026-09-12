@@ -83,6 +83,26 @@ frontend (xterm.js)  <—events/methods—>  app.go  <—socket—>  meerkat-dae
   plain ES modules and `backdrop.js` stands in for the `<Benday>`
   wrapper. Re-run the script to bump it.
 
+## Two engines at once
+
+An app built from this checkout (`wails build`, `wails dev`, `./launch.sh`)
+has no engine inside its bundle, so it dials `~/.meerkat/dev.sock` — where a
+`mix run` engine listens by default. An installed release carries its engine
+and dials `~/.meerkat/meerkat.sock`. The two never share a path, so both can be
+open at the same time without one stealing the other's socket, which is what
+used to make the daemon "disconnect": the installed `meerkat-engine start` saw
+its own release node was down, deleted the checkout engine's live socket, and
+bound its own there.
+
+Nothing replaces a live socket any more. The engine refuses to bind a path
+something answers on; `meerkat-engine start` asks first with
+`meerkat-cli --probe` and uses whatever it finds. Every engine introduces
+itself on connect (the `H` frame: version, `release`/`dev`, a per-boot instance
+id, pid, node, socket) and the sidebar shows that next to *Jobs* — `dev 0.3.1
+#d1b2ffdd` in the accent colour for a checkout engine, `release 0.3.1 #…` for
+the installed one. `engine` in any pane prints the same. Set `MEERKAT_SOCK` to
+put any frontend on any engine.
+
 ## Worktrees
 
 The sidebar (default `Cmd+B`) lists the git worktrees of whatever repo

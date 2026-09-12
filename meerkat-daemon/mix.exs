@@ -4,11 +4,22 @@ defmodule MeerkatDaemon.MixProject do
   def project do
     [
       app: :meerkat_daemon,
-      version: "0.1.0",
+      # The repository's VERSION file is the one source of truth for the
+      # version — the release workflow bumps it, the tag is derived from it,
+      # and an engine that reported anything else would mislead the panels
+      # that show which engine they are talking to.
+      version: version(),
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps()
     ]
+  end
+
+  defp version do
+    case File.read(Path.expand("../VERSION", __DIR__)) do
+      {:ok, v} -> String.trim(v)
+      _ -> "0.0.0"
+    end
   end
 
   # Run "mix help compile.app" to learn about applications.

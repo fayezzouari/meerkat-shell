@@ -23,7 +23,7 @@ defmodule MeerkatDaemon.Evaluator do
 
   @type emit :: (:stdout | :stderr, String.t() -> :ok)
 
-  @builtins ~w(cd exit quit jobs fg bg kill stop)
+  @builtins ~w(cd exit quit jobs fg bg kill stop engine)
 
   @spec run(
           [MeerkatDaemon.Parser.stage()],
@@ -57,6 +57,14 @@ defmodule MeerkatDaemon.Evaluator do
       emit.(:stderr, "cd: no such directory: #{target}")
       {:ok, cwd, 1}
     end
+  end
+
+  # Which engine this is. The answer to "am I talking to the installed one or
+  # the checkout's?", which the prompt does not show and the socket path only
+  # implies.
+  defp builtin("engine", _args, cwd, emit) do
+    Enum.each(MeerkatDaemon.Identity.describe(), &emit.(:stdout, &1))
+    {:ok, cwd, 0}
   end
 
   # Tab-separated after the status, because everything a frontend wants about a

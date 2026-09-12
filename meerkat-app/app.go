@@ -138,6 +138,11 @@ func (a *App) readLoop(id string, client *daemonclient.Client) {
 			runtime.EventsEmit(a.ctx, "daemon:line", map[string]string{"id": id, "line": "E:" + string(payload)})
 		case daemonclient.MsgCwd:
 			runtime.EventsEmit(a.ctx, "daemon:line", map[string]string{"id": id, "line": "D:" + string(payload)})
+		case daemonclient.MsgHello:
+			runtime.EventsEmit(a.ctx, "daemon:engine", map[string]any{
+				"id":     id,
+				"engine": daemonclient.ParseIdentity(string(payload)),
+			})
 		case daemonclient.MsgExit:
 			runtime.EventsEmit(a.ctx, "daemon:line", map[string]string{"id": id, "line": "X:" + string(payload)})
 		}
@@ -243,6 +248,28 @@ type JobInfo struct {
 	Detached bool   `json:"detached"`
 	osPid    int
 	hasOsPid bool
+}
+
+// EngineInfo is what the sidebar shows next to the job table: which engine
+// this app is talking to. Two can exist at once — the installed release and a
+// checkout's `mix run` — and they are told apart by the instance id, the
+// flavor and the socket, none of which the terminal's prompt shows.
+type EngineInfo struct {
+	daemonclient.Identity
+	Reachable bool   `json:"reachable"`
+	Expected  string `json:"expected"` // the socket this app dials
+}
+
+func (a *App) EngineInfo() EngineInfo {
+	path := daemonclient.SocketPath()
+	id, err := daemonclient.Probe(path)
+	if err != nil {
+		return EngineInfo{Expected: path}
+	}
+	if id.Socket == "" {
+		id.Socket = path
+	}
+	return EngineInfo{Identity: id, Reachable: true, Expected: path}
 }
 
 // ListJobs reports the daemon-wide `jobs` table (JobManager is one GenServer,

@@ -73,6 +73,7 @@ export function createSidebar(sessionManager) {
   // redraw the other sections instead of blanking them until the next tick.
   let lastSessions = [];
   let lastJobs = [];
+  let engine = null; // EngineInfo, so the Jobs heading can say whose jobs
 
   function interacting() {
     return creating || busy || pendingRemove !== null;
@@ -244,6 +245,29 @@ export function createSidebar(sessionManager) {
     return rows + createRow + errorRow + noteRow + busyRow;
   }
 
+  // The engine behind the job table, told apart from any other on the machine
+  // by flavor and instance id: a `mix run` from a checkout and the installed
+  // release can both be up, on different sockets, and this is how you know
+  // which one a window is on.
+  function renderEngine() {
+    if (!engine) return "";
+    if (!engine.reachable) {
+      return `<span class="wt-tag wt-tag-stale" title="nothing is listening on ${escapeHtml(engine.expected)}">engine down</span>`;
+    }
+    const flavor = engine.flavor || "engine";
+    const label = engine.version ? `${flavor} ${engine.version}` : flavor;
+    const id = engine.instance ? `<span class="engine-id">#${escapeHtml(engine.instance)}</span>` : "";
+    const title = [
+      `${label}${engine.instance ? ` · instance ${engine.instance}` : ""}`,
+      engine.pid ? `pid ${engine.pid}` : "",
+      engine.node ? `node ${engine.node}` : "",
+      `socket ${engine.socket || engine.expected}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return `<span class="wt-tag${flavor === "release" ? "" : " wt-tag-dev"}" title="${escapeHtml(title)}">${escapeHtml(label)}${id}</span>`;
+  }
+
   function rerender() {
     render(lastSessions, lastJobs);
   }
@@ -265,7 +289,10 @@ export function createSidebar(sessionManager) {
         ${renderWorktrees()}
       </div>
       <div class="sidebar-section">
-        <div class="sidebar-heading">Jobs</div>
+        <div class="sidebar-heading sidebar-heading-row">
+          <span>Jobs</span>
+          ${renderEngine()}
+        </div>
         ${renderJobs(jobs)}
         ${jobError ? `<div class="sidebar-error">${escapeHtml(jobError)}</div>` : ""}
       </div>
@@ -418,8 +445,9 @@ export function createSidebar(sessionManager) {
     render(sessionManager.list(), lastJobs);
 
     const cwd = sessionManager.activeCwd();
-    const [jobs, status] = await Promise.all([
+    const [jobs, info, status] = await Promise.all([
       within(daemon.listJobs(), REMOTE_TIMEOUT_MS).catch(() => lastJobs),
+      within(daemon.engineInfo(), REMOTE_TIMEOUT_MS).catch(() => engine),
       within(worktrees.repoStatus(cwd), REMOTE_TIMEOUT_MS).catch((err) => {
         worktreeError = errorText(err);
         return null;
@@ -429,6 +457,7 @@ export function createSidebar(sessionManager) {
       repo = status;
       worktreeError = "";
     }
+    if (info) engine = info;
     // A live view, not a history: "done" jobs just pile up.
     const activeJobs = jobs.filter((j) => j.status === "running" || j.status === "stopped");
     render(sessionManager.list(), activeJobs);

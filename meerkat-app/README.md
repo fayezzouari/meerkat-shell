@@ -74,6 +74,14 @@ frontend (xterm.js)  <—events/methods—>  app.go  <—socket—>  meerkat-dae
   editing (echo, backspace) — see the comment in that file for why:
   the daemon doesn't allocate a pty yet, so there's no kernel tty
   driver doing that for us.
+- `frontend/js/backdrop.js` — the default window background: the
+  Meerkat mark rendered as an animated Ben-Day dot field by
+  [Benday](https://github.com/KacemMathlouthi/benday). Benday ships as
+  a shadcn/React registry item, but this frontend has no React or
+  bundler, so `scripts/vendor-benday.sh` pulls its framework-agnostic
+  core (bake, renderer, presets) into `frontend/vendor/benday/` as
+  plain ES modules and `backdrop.js` stands in for the `<Benday>`
+  wrapper. Re-run the script to bump it.
 
 ## Worktrees
 

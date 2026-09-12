@@ -10,10 +10,11 @@ import { DEFAULT_BACKGROUND, getSettings, onAppearanceChange } from "./appearanc
 const LOGO = "/assets/meerkat-logo.png";
 const PRESET = "shimmer";
 // Fraction of the window the mark may span on its tighter axis.
-const SCALE = 0.8;
+const SCALE = 0.4;
 // Dots across the mark's longest side. The registry default (24) is sized for
-// a 64px indicator; a window-sized mark needs finer sampling to read as a logo.
-const GRID = 56;
+// a 64px indicator; a mark a few hundred pixels tall needs finer sampling to
+// read as a logo, but past ~40 the dots crowd and blur.
+const GRID = 40;
 
 let dotMap = null;
 

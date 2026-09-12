@@ -37,6 +37,14 @@ meerkat-app (GUI)     ─┘
   logic and wire protocol as `meerkat-client` — just rendered in a window
   with proper terminal emulation instead of your existing terminal app.
 
+Commands run in *your* environment, not the engine's. At startup the engine
+asks your login shell (`$SHELL -ilc 'env -0'`) what it exports — so `.zshrc`
+or `.bashrc` has run, `PATH` has `~/.local/bin` and whatever else you added,
+and `TERM` is set — and gives that to every command. It matters because an
+engine started by Meerkat.app opened from Spotlight would otherwise inherit
+launchd's bare environment and stay that way for as long as it lives. Change
+your rc file and run `meerkat-engine restart` to pick it up.
+
 Both frontends are interchangeable views onto the same daemon: start a
 background job from the CLI, then open the GUI and run `jobs` — it's the
 same job table, because the state never lived in the client. Close the pane

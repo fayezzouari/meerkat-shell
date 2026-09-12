@@ -67,6 +67,7 @@ defmodule MeerkatDaemon.Parser do
     case List.last(tokens) do
       :background ->
         rest = List.delete_at(tokens, -1)
+
         if :background in rest do
           {:error, "'&' is only supported at the end of a command"}
         else

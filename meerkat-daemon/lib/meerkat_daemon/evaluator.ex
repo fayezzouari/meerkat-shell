@@ -19,7 +19,7 @@ defmodule MeerkatDaemon.Evaluator do
   redirecting erlexec's message target mid-flight.
   """
 
-  alias MeerkatDaemon.{JobManager, Ports}
+  alias MeerkatDaemon.{JobManager, Ports, ShellEnv}
 
   @type emit :: (:stdout | :stderr, String.t() -> :ok)
 
@@ -214,6 +214,10 @@ defmodule MeerkatDaemon.Evaluator do
   # PAGER/GIT_PAGER/MANPAGER are forced to `cat`: with a real pty, isatty()
   # succeeds and git/man reach for `less`, which then blocks on keystrokes and
   # looks exactly like a hung command. Directly-invoked pagers still work.
+  #
+  # The rest of the environment is the user's shell's, not the engine's — see
+  # MeerkatDaemon.ShellEnv for why an engine started by the app has neither
+  # the user's PATH nor a TERM.
   defp exec_pipeline(stages, cwd, :foreground, emit, terminal) do
     case terminal do
       %{tty: tty} ->
@@ -227,7 +231,8 @@ defmodule MeerkatDaemon.Evaluator do
             {:stderr, tty},
             :monitor,
             {:cd, cwd},
-            {:env, [{"PAGER", "cat"}, {"GIT_PAGER", "cat"}, {"MANPAGER", "cat"}]}
+            {:env,
+             ShellEnv.exec_env([{"PAGER", "cat"}, {"GIT_PAGER", "cat"}, {"MANPAGER", "cat"}])}
           ])
 
         JobManager.set_handle(id, pid, os_pid)
@@ -244,7 +249,15 @@ defmodule MeerkatDaemon.Evaluator do
     id = JobManager.new_job(cmd_string)
 
     Task.start(fn ->
-      {:ok, pid, os_pid} = :exec.run(cmd_string, [:stdout, :stderr, :monitor, {:cd, cwd}])
+      {:ok, pid, os_pid} =
+        :exec.run(cmd_string, [
+          :stdout,
+          :stderr,
+          :monitor,
+          {:cd, cwd},
+          {:env, ShellEnv.exec_env()}
+        ])
+
       JobManager.set_handle(id, pid, os_pid)
 
       capture = fn tag, text -> JobManager.append_output(id, tag, text) end

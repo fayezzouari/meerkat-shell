@@ -119,9 +119,13 @@ func TestWorktreeRoundTrip(t *testing.T) {
 		t.Fatalf("WorktreeDir = %q, want %q", status.WorktreeDir, want)
 	}
 
-	path, err := app.CreateWorktree(root, "feature/x", "")
+	created, err := app.CreateWorktree(root, "feature/x", "", "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
+	}
+	path := created.Path
+	if created.SetupRan {
+		t.Fatalf("no setup script was given, yet one ran: %+v", created)
 	}
 	if want := filepath.Join(base, "repo-worktrees", "feature-x"); path != want {
 		t.Fatalf("created at %q, want %q", path, want)
@@ -140,7 +144,7 @@ func TestWorktreeRoundTrip(t *testing.T) {
 	}
 
 	// A creation that collides should fail rather than clobber.
-	if _, err := app.CreateWorktree(root, "feature/x", ""); err == nil {
+	if _, err := app.CreateWorktree(root, "feature/x", "", ""); err == nil {
 		t.Fatal("duplicate create succeeded, want error")
 	}
 

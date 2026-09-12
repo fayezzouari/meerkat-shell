@@ -12,10 +12,15 @@ export function createSessionManager({ tabBarEl, panesEl }) {
   let activeTabId = null;
   let nextTabId = 1;
   let onToggleSidebar = () => {};
+  let onToggleVcs = () => {};
   let onLayoutChange = () => {};
 
   function setSidebarToggle(fn) {
     onToggleSidebar = fn;
+  }
+
+  function setVcsToggle(fn) {
+    onToggleVcs = fn;
   }
 
   function setOnLayoutChange(fn) {
@@ -162,6 +167,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
       initialCwd,
       onNewTabRequested: () => newTab(),
       onToggleSidebarRequested: () => onToggleSidebar(),
+      onToggleVcsRequested: () => onToggleVcs(),
       onSplitRequested: (dir) => splitActive(dir),
       onSessionEnded: (id) => handleSessionEnded(id),
     });
@@ -360,6 +366,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     activeCwd: () => activeSession()?.getCwd() || "",
     activeId: () => activeTab()?.activeLeafId ?? null,
     setSidebarToggle,
+    setVcsToggle,
     setOnLayoutChange,
   };
 }

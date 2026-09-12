@@ -102,11 +102,68 @@ working tree. Preferences → Worktrees changes that: `<repo>` expands to
 the repository's name and relative paths resolve against its root, so
 `.meerkat/worktrees` keeps them inside the repo instead.
 
+A fresh worktree is a bare checkout: no `.env`, no `node_modules`, nothing
+git ignores. Preferences → Worktrees → *Worktree setup script* is a shell
+script that runs inside every worktree the sidebar creates, right after
+`git worktree add`, with your login shell's environment (so `npm`, `direnv`
+and anything from `~/.local/bin` resolve). It sees:
+
+| Variable | Value |
+| --- | --- |
+| `MEERKAT_WORKTREE` | the new checkout, also the working directory |
+| `MEERKAT_WORKTREE_NAME` | its directory name |
+| `MEERKAT_REPO_ROOT` | the main working tree, where the `.env` you want to copy lives |
+| `MEERKAT_BRANCH` | the branch checked out in it |
+
+A repository can ship its own hook too: `.meerkat/worktree-setup.sh` at the
+repo root runs after the preference script, so a team commits the setup once
+and every clone gets it. Output from both lands in the sidebar; a failing
+script is reported there rather than failing the creation — the worktree
+exists by then and still opens.
+
+```sh
+cp "$MEERKAT_REPO_ROOT/.env" .env
+npm install
+```
+
 `worktree.go` shells out to the real `git` binary for all of this
 (`worktree list --porcelain`, `add`, `remove`) rather than
 reimplementing the plumbing, and every invocation runs with
 `GIT_TERMINAL_PROMPT=0` under a timeout — the sidebar polls on a 2s
 timer, and a git call that blocks on input would wedge it.
+
+## Source control (beta)
+
+`Cmd+G` (or View → Toggle Source Control) opens a panel on the right of the
+terminals showing the checkout the focused pane is in — the linked worktree's
+own index and history when the pane is inside one, not the main repo's.
+
+- **Branch row** — branch, `↑n` to push and `↓n` to pull against the
+  upstream, or *no upstream* when none is set.
+- **Pull / Push / Sync / Stash** — plain `git pull`, `git push` (with `-u`
+  to the first remote on a branch that has no upstream), pull-then-push, and
+  `git stash push --include-untracked`. Git's own transcript appears under the
+  buttons; a remote that wants credentials fails with git's message, because
+  nothing here ever prompts (`GIT_TERMINAL_PROMPT=0`).
+- **Commit** — a message box and a button, live once something is staged.
+  `Cmd+Enter` in the box commits.
+- **Conflicts / Staged / Changes / Untracked** — one row per path with its
+  status letter. `+` stages, `−` unstages, `↺` discards (after a confirm:
+  `git restore` for a tracked file, delete for an untracked one; ignored files
+  are never touched). Click a row to unfold its diff. *list* shows flat paths,
+  *tree* nests them by folder.
+- **Commits** — the last 40 on `HEAD`. A filled dot and a `local` tag mark
+  commits the upstream does not have yet, so what is and is not pushed is
+  visible without `git log origin/main..`.
+- **Stashes** — each with *pop* and *drop*.
+
+It is a mirror, refreshed every 3 seconds and after each of its own actions;
+the terminal beside it is authoritative. States it does not manage — an
+interactive rebase, submodules, sparse checkouts — are shown as best it can,
+with a banner naming any merge, rebase, cherry-pick or revert in progress.
+`vcs.go` is the Go side: `git status --porcelain=v2 --branch -z` for the tree,
+`git log` plus `git rev-list <upstream>..HEAD` for the pushed/local split, and
+one git invocation per button.
 
 ## Known limitation: no pty yet
 

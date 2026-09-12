@@ -165,6 +165,20 @@ export function createPreferencesOverlay() {
                value="${escapeHtml(worktrees.getDir())}" />
         <button class="prefs-btn" id="worktree-dir-reset">Reset</button>
       </div>
+      <div class="prefs-row prefs-row-stacked">
+        <div class="prefs-row-text">
+          <div class="prefs-row-label">Worktree setup script</div>
+          <div class="prefs-row-desc">
+            Runs inside every new worktree, after it is created — a fresh checkout has no
+            <code>.env</code>, no dependencies, nothing ignored by git. Runs with your shell's environment;
+            <code>$MEERKAT_REPO_ROOT</code> is the main checkout, <code>$MEERKAT_WORKTREE</code> the new one,
+            <code>$MEERKAT_BRANCH</code> its branch. A repo can also ship its own in
+            <code>.meerkat/worktree-setup.sh</code>, which runs after this.
+          </div>
+        </div>
+        <textarea class="prefs-textarea" id="worktree-setup" rows="4" spellcheck="false"
+                  placeholder="${escapeHtml(worktrees.EXAMPLE_SETUP_SCRIPT)}">${escapeHtml(worktrees.getSetupScript())}</textarea>
+      </div>
     `;
   }
 
@@ -179,6 +193,11 @@ export function createPreferencesOverlay() {
       worktrees.resetDir();
       render();
     });
+    const setup = root.querySelector("#worktree-setup");
+    // Saved as typed: there is no apply step anywhere else in this overlay.
+    setup.addEventListener("input", () => worktrees.setSetupScript(setup.value));
+    // Keystrokes stay here rather than reaching a shortcut handler.
+    setup.addEventListener("keydown", (event) => event.stopPropagation());
   }
 
   function render() {

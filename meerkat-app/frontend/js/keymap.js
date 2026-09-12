@@ -88,6 +88,12 @@ export const ACTIONS = [
     default: { key: "b", meta: true },
   },
   {
+    id: "toggleVcs",
+    label: "Toggle Source Control",
+    description: "Shows the focused pane's git changes, commits and stashes on the right. Beta.",
+    default: { key: "g", meta: true },
+  },
+  {
     id: "toggleFullscreen",
     label: "Toggle Fullscreen",
     default: { key: "f", meta: true, ctrl: true },

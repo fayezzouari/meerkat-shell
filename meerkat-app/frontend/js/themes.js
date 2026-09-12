@@ -23,6 +23,7 @@ export const THEMES = [
       backdrop: "rgba(18, 16, 15, 0.62)",
       danger: "#f08a72",
       warning: "#d9a94d",
+      success: "#9cbf7a",
     },
     terminal: {
       background: "#232120",
@@ -64,6 +65,7 @@ export const THEMES = [
       backdrop: "rgba(8, 8, 9, 0.62)",
       danger: "#ff7a7a",
       warning: "#d9b84d",
+      success: "#8fd18a",
     },
     terminal: {
       background: "#141416",
@@ -105,6 +107,7 @@ export const THEMES = [
       backdrop: "rgba(16, 20, 26, 0.62)",
       danger: "#d08770",
       warning: "#ebcb8b",
+      success: "#a3be8c",
     },
     terminal: {
       background: "#262c36",
@@ -146,6 +149,7 @@ export const THEMES = [
       backdrop: "rgba(12, 16, 13, 0.62)",
       danger: "#e69485",
       warning: "#d4bd76",
+      success: "#b5d99c",
     },
     terminal: {
       background: "#1c231e",
@@ -187,6 +191,7 @@ export const THEMES = [
       backdrop: "rgba(14, 11, 8, 0.62)",
       danger: "#ea8163",
       warning: "#e0913f",
+      success: "#9fbf6b",
     },
     terminal: {
       background: "#201a15",
@@ -228,6 +233,7 @@ export const THEMES = [
       backdrop: "rgba(120, 112, 100, 0.35)",
       danger: "#b8402f",
       warning: "#9a7318",
+      success: "#4f8a3a",
     },
     terminal: {
       background: "#f4f1ea",
@@ -289,6 +295,7 @@ export function applyTheme(id) {
   root.setProperty("--backdrop", theme.chrome.backdrop);
   root.setProperty("--danger", theme.chrome.danger);
   root.setProperty("--warning", theme.chrome.warning);
+  root.setProperty("--success", theme.chrome.success);
 
   subscribers.forEach((fn) => fn(theme));
   return theme;

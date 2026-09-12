@@ -11,6 +11,7 @@ export async function createSession({
   initialCwd,
   onNewTabRequested,
   onToggleSidebarRequested,
+  onToggleVcsRequested,
   onSplitRequested,
   onSessionEnded,
 }) {
@@ -277,6 +278,11 @@ export async function createSession({
     if (keymap.matches(event, "toggleSidebar")) {
       event.preventDefault();
       onToggleSidebarRequested();
+      return false;
+    }
+    if (keymap.matches(event, "toggleVcs")) {
+      event.preventDefault();
+      onToggleVcsRequested();
       return false;
     }
     // Before splitRight, which by default differs only by Shift — matters the

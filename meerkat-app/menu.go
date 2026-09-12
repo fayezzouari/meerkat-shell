@@ -26,6 +26,18 @@ func buildMenu(app *App) *menu.Menu {
 	})
 
 	root.Append(menu.EditMenu())
+
+	// Mirrors the keyboard shortcuts (keymap.js), which are remappable; the
+	// accelerators shown here are the defaults. Both emit events rather than
+	// touching the DOM, since the panels live in the webview.
+	viewMenu := root.AddSubmenu("View")
+	viewMenu.AddText("Toggle Sidebar", keys.CmdOrCtrl("b"), func(_ *menu.CallbackData) {
+		runtime.EventsEmit(app.ctx, "sidebar:toggle")
+	})
+	viewMenu.AddText("Toggle Source Control (Beta)", keys.CmdOrCtrl("g"), func(_ *menu.CallbackData) {
+		runtime.EventsEmit(app.ctx, "vcs:toggle")
+	})
+
 	root.Append(menu.WindowMenu())
 
 	return root

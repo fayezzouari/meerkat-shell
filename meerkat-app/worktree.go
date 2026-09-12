@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -278,26 +279,52 @@ func validateWorktreeName(name string) error {
 	return nil
 }
 
+// WorktreeCreated is CreateWorktree's answer: where the checkout landed, and
+// what the setup script had to say. Setup trouble is reported here rather than
+// as the call's error, because by then the worktree exists and opening it is
+// still the right thing to do.
+type WorktreeCreated struct {
+	Path        string `json:"path"`
+	SetupRan    bool   `json:"setupRan"`
+	SetupOutput string `json:"setupOutput"`
+	SetupError  string `json:"setupError"`
+}
+
+// worktreeSetupFile is the per-repo hook, committed alongside the code so
+// everyone who clones the repo gets the same worktree setup. The preference
+// script (see setupScript below) is per user, for what should happen in every
+// repo.
+const worktreeSetupFile = ".meerkat/worktree-setup.sh"
+
+// worktreeSetupTimeout bounds the setup scripts. Installing dependencies can
+// take a while; a script that never returns should not hold the sidebar for
+// the rest of the session.
+const worktreeSetupTimeout = 5 * time.Minute
+
 // CreateWorktree adds a worktree for `name` under the resolved worktree
 // directory. If a local branch called `name` already exists it's checked out;
-// otherwise a new branch of that name is created from HEAD. Returns the new
-// worktree's path so the frontend can open a tab there.
-func (a *App) CreateWorktree(cwd string, name string, dirTemplate string) (string, error) {
+// otherwise a new branch of that name is created from HEAD.
+//
+// Then the setup scripts run inside the new checkout: setupScript, the user's
+// preference, and the repo's own .meerkat/worktree-setup.sh if it has one. A
+// fresh worktree is a bare checkout — no .env, no node_modules, no build
+// output — and this is where those get copied or made.
+func (a *App) CreateWorktree(cwd string, name string, dirTemplate string, setupScript string) (WorktreeCreated, error) {
 	name = strings.TrimSpace(name)
 	if err := validateWorktreeName(name); err != nil {
-		return "", err
+		return WorktreeCreated{}, err
 	}
 
 	root, err := mainWorktreeRoot(cwd)
 	if err != nil {
-		return "", err
+		return WorktreeCreated{}, err
 	}
 	if root == "" {
-		return "", fmt.Errorf("%s is not inside a git repository", cwd)
+		return WorktreeCreated{}, fmt.Errorf("%s is not inside a git repository", cwd)
 	}
 	worktreeDir, err := resolveWorktreeDir(root, dirTemplate)
 	if err != nil {
-		return "", err
+		return WorktreeCreated{}, err
 	}
 
 	// Slashes are legal in the branch name but would nest the checkout a level
@@ -306,10 +333,10 @@ func (a *App) CreateWorktree(cwd string, name string, dirTemplate string) (strin
 	path := filepath.Join(worktreeDir, dirName)
 
 	if _, err := os.Stat(path); err == nil {
-		return "", fmt.Errorf("%s already exists", path)
+		return WorktreeCreated{}, fmt.Errorf("%s already exists", path)
 	}
 	if err := os.MkdirAll(worktreeDir, 0o755); err != nil {
-		return "", fmt.Errorf("cannot create %s: %w", worktreeDir, err)
+		return WorktreeCreated{}, fmt.Errorf("cannot create %s: %w", worktreeDir, err)
 	}
 
 	// Run from the main worktree: cwd may itself be a worktree that's about to
@@ -325,9 +352,76 @@ func (a *App) CreateWorktree(cwd string, name string, dirTemplate string) (strin
 		_, err = git(root, "worktree", "add", "-b", name, path)
 	}
 	if err != nil {
-		return "", err
+		return WorktreeCreated{}, err
 	}
-	return path, nil
+
+	created := WorktreeCreated{Path: path}
+	created.SetupRan, created.SetupOutput, created.SetupError = runWorktreeSetup(root, path, name, setupScript)
+	return created, nil
+}
+
+// runWorktreeSetup runs the user's script, then the repo's, inside the new
+// worktree. Both see where they are through the environment:
+//
+//	MEERKAT_WORKTREE       the new checkout (also the working directory)
+//	MEERKAT_WORKTREE_NAME  its directory name
+//	MEERKAT_REPO_ROOT      the main working tree, where .env and friends live
+//	MEERKAT_BRANCH         the branch checked out in it
+//
+// Output from both is one transcript. The first failure stops the sequence and
+// is reported, with the transcript, as text rather than as an error: the
+// worktree is already there and the sidebar should open it regardless.
+func runWorktreeSetup(root string, path string, branch string, setupScript string) (ran bool, output string, errText string) {
+	type step struct {
+		label string
+		args  []string
+	}
+	var steps []step
+	if strings.TrimSpace(setupScript) != "" {
+		steps = append(steps, step{"setup script", []string{"-c", setupScript}})
+	}
+	repoHook := filepath.Join(root, worktreeSetupFile)
+	if info, err := os.Stat(repoHook); err == nil && !info.IsDir() {
+		steps = append(steps, step{worktreeSetupFile, []string{repoHook}})
+	}
+	if len(steps) == 0 {
+		return false, "", ""
+	}
+
+	env := append(userEnviron(),
+		"MEERKAT_WORKTREE="+path,
+		"MEERKAT_WORKTREE_NAME="+filepath.Base(path),
+		"MEERKAT_REPO_ROOT="+root,
+		"MEERKAT_BRANCH="+branch,
+		// A script that reaches for git must not stop for a password either.
+		"GIT_TERMINAL_PROMPT=0",
+	)
+
+	var transcript strings.Builder
+	for _, s := range steps {
+		ctx, cancel := context.WithTimeout(context.Background(), worktreeSetupTimeout)
+		cmd := exec.CommandContext(ctx, "/bin/sh", s.args...)
+		cmd.Dir = path
+		cmd.Env = env
+		cmd.Stdin = nil
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		err := cmd.Run()
+		cancel()
+
+		if text := strings.TrimSpace(out.String()); text != "" {
+			fmt.Fprintf(&transcript, "%s\n", text)
+		}
+		if ctx.Err() == context.DeadlineExceeded {
+			return true, strings.TrimSpace(transcript.String()),
+				fmt.Sprintf("%s timed out after %s", s.label, worktreeSetupTimeout)
+		}
+		if err != nil {
+			return true, strings.TrimSpace(transcript.String()), fmt.Sprintf("%s failed: %v", s.label, err)
+		}
+	}
+	return true, strings.TrimSpace(transcript.String()), ""
 }
 
 // RemoveWorktree deletes a linked worktree. The main worktree is refused: git

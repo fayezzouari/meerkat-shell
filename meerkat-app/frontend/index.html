@@ -22,6 +22,7 @@
         --accent: #d97757;
         --danger: #f08a72;
         --warning: #d9a94d;
+        --success: #9cbf7a;
         --backdrop: rgba(18, 16, 15, 0.62);
 
         --font-ui: "DM Sans", -apple-system, "Helvetica Neue", sans-serif;
@@ -738,6 +739,607 @@
         display: flex;
         justify-content: flex-end;
       }
+
+      /* ── Source control panel (beta) ─────────────────────────────────
+         The sidebar's twin on the right: same surface, same hairline, grip on
+         its left edge. Sized by --vcs-width from vcsPanel.js. */
+      #vcs {
+        flex: 0 0 var(--vcs-width, 320px);
+        min-height: 0;
+        overflow-y: auto;
+        background: var(--surface);
+        border-left: 1px solid var(--border);
+        padding: 6px 0 12px;
+        box-sizing: border-box;
+        font-size: 12px;
+        color: var(--text-dim);
+      }
+      #vcs.hidden {
+        display: none;
+      }
+      #vcs-grip {
+        flex: 0 0 4px;
+        cursor: col-resize;
+        background: transparent;
+        transition: background 0.12s ease;
+      }
+      #vcs-grip:hover,
+      #vcs-grip.is-dragging {
+        background: var(--accent);
+      }
+      #vcs-grip.hidden {
+        display: none;
+      }
+      .vcs-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px 6px;
+      }
+      .vcs-title {
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+      }
+      .vcs-head-spacer {
+        flex: 1 1 auto;
+      }
+      .vcs-beta {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--warning);
+        border: 1px solid var(--warning);
+        border-radius: 3px;
+        padding: 0 4px;
+        cursor: help;
+      }
+      .vcs-view {
+        display: inline-flex;
+        gap: 2px;
+      }
+      .vcs-repo {
+        padding: 0 14px;
+        font-family: var(--font-display);
+        font-size: 16px;
+        color: var(--text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .vcs-branch {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 14px 6px;
+        min-width: 0;
+      }
+      .vcs-branch-icon {
+        color: var(--accent);
+      }
+      .vcs-branch-name {
+        font-family: var(--font-mono);
+        font-size: 11.5px;
+        color: var(--text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .vcs-detached {
+        color: var(--warning);
+      }
+      .vcs-ab {
+        flex: 0 0 auto;
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        padding: 0 4px;
+        border-radius: 3px;
+        background: var(--bg-hover);
+      }
+      .vcs-ab-ahead {
+        color: var(--accent);
+      }
+      .vcs-ab-behind {
+        color: var(--warning);
+      }
+      .vcs-upstream {
+        flex: 1 1 auto;
+        min-width: 0;
+        text-align: right;
+        font-size: 10.5px;
+        color: var(--text-faint);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .vcs-upstream-none {
+        font-style: italic;
+      }
+      .vcs-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        padding: 0 12px 6px;
+      }
+      .vcs-btn {
+        flex: 1 1 auto;
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-dim);
+        background: var(--bg-hover);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 4px 8px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: color 0.12s ease, background 0.12s ease;
+      }
+      .vcs-btn:hover {
+        color: var(--text);
+        border-color: var(--text-faint);
+      }
+      .vcs-btn:disabled,
+      .vcs-btn:disabled:hover {
+        opacity: 0.4;
+        cursor: default;
+        color: var(--text-dim);
+        border-color: var(--border);
+      }
+      .vcs-btn-icon {
+        flex: 0 0 auto;
+      }
+      .vcs-btn-primary {
+        color: var(--bg);
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .vcs-btn-primary:hover {
+        color: var(--bg);
+        filter: brightness(1.08);
+      }
+      .vcs-btn-primary:disabled,
+      .vcs-btn-primary:disabled:hover {
+        color: var(--bg);
+        background: var(--accent);
+        border-color: var(--accent);
+        filter: none;
+      }
+      .vcs-commit-box {
+        margin: 0 12px 8px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg);
+        overflow: hidden;
+      }
+      .vcs-textarea,
+      .vcs-input {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        font-family: var(--font-mono);
+        font-size: 11.5px;
+        line-height: 1.4;
+        color: var(--text);
+        background: transparent;
+        border: none;
+        outline: none;
+        resize: vertical;
+      }
+      .vcs-input {
+        padding: 3px 6px;
+        border: 1px solid var(--accent);
+        border-radius: 4px;
+        background: var(--bg);
+      }
+      .vcs-commit-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        padding: 4px 6px 4px 8px;
+        border-top: 1px solid var(--border);
+      }
+      .vcs-commit-foot .vcs-btn {
+        flex: 0 0 auto;
+      }
+      .vcs-hint {
+        font-size: 10.5px;
+        color: var(--text-faint);
+      }
+      .vcs-banner {
+        margin: 0 12px 6px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        line-height: 1.4;
+        color: var(--text);
+        background: var(--bg-hover);
+        border-left: 2px solid var(--warning);
+      }
+      .vcs-banner code {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+      }
+      .vcs-result {
+        position: relative;
+        margin: 0 12px 6px;
+        padding: 5px 24px 5px 8px;
+        border-radius: 6px;
+        background: var(--bg-hover);
+        border-left: 2px solid var(--success);
+      }
+      .vcs-result-error {
+        border-left-color: var(--danger);
+      }
+      .vcs-result pre {
+        margin: 0;
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        line-height: 1.4;
+        color: var(--text-dim);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        max-height: 140px;
+        overflow-y: auto;
+      }
+      .vcs-result-error pre {
+        color: var(--danger);
+      }
+      .vcs-result .vcs-mini {
+        position: absolute;
+        top: 3px;
+        right: 4px;
+      }
+      .vcs-section {
+        margin-top: 4px;
+        padding-top: 4px;
+        border-top: 1px solid var(--border);
+      }
+      .vcs-section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        padding: 4px 12px 2px;
+      }
+      .vcs-section-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        cursor: pointer;
+        user-select: none;
+      }
+      .vcs-count {
+        font-weight: 500;
+        letter-spacing: 0;
+        color: var(--text-faint);
+        background: var(--bg-hover);
+        border-radius: 3px;
+        padding: 0 4px;
+      }
+      .vcs-legend {
+        font-size: 10.5px;
+        color: var(--text-faint);
+      }
+      .vcs-caret {
+        display: inline-block;
+        width: 10px;
+        font-size: 9px;
+        color: var(--text-faint);
+      }
+      .vcs-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0 6px;
+        padding: 3px 6px 3px calc(6px + var(--depth, 0) * 12px);
+        border-radius: 5px;
+        min-width: 0;
+      }
+      .vcs-file,
+      .vcs-dir,
+      .vcs-commit,
+      .vcs-stash {
+        cursor: pointer;
+      }
+      .vcs-file:hover,
+      .vcs-dir:hover,
+      .vcs-commit:hover,
+      .vcs-stash:hover {
+        background: var(--bg-hover);
+        color: var(--text);
+      }
+      .vcs-file-open {
+        color: var(--text);
+      }
+      .vcs-status {
+        flex: 0 0 14px;
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        font-weight: 700;
+        text-align: center;
+        color: var(--text-faint);
+      }
+      .vcs-status-M,
+      .vcs-status-T {
+        color: var(--warning);
+      }
+      .vcs-status-A,
+      .vcs-status-U {
+        color: var(--success);
+      }
+      .vcs-status-D {
+        color: var(--danger);
+      }
+      .vcs-status-R,
+      .vcs-status-C {
+        color: var(--accent);
+      }
+      .vcs-file-label {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        align-items: baseline;
+        gap: 4px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      .vcs-file-dir {
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--text-faint);
+        direction: rtl;
+        text-align: left;
+      }
+      .vcs-file-name {
+        flex: 0 0 auto;
+      }
+      .vcs-file-from {
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 10px;
+        color: var(--text-faint);
+      }
+      .vcs-dir-name {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-faint);
+      }
+      .vcs-row-actions {
+        flex: 0 0 auto;
+        display: inline-flex;
+        gap: 2px;
+        visibility: hidden;
+      }
+      .vcs-row:hover .vcs-row-actions,
+      .vcs-row-actions:focus-within {
+        visibility: visible;
+      }
+      .vcs-mini {
+        flex: 0 0 auto;
+        padding: 0 5px;
+        font-family: inherit;
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--text-faint);
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .vcs-mini:hover {
+        color: var(--text);
+        background: var(--bg-hover);
+        border-color: var(--border);
+      }
+      .vcs-mini:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .vcs-mini-danger:hover {
+        color: var(--danger);
+      }
+      .vcs-mini-on {
+        color: var(--text);
+        background: var(--bg-hover);
+        border-color: var(--border);
+      }
+      .vcs-confirm {
+        background: var(--bg-hover);
+      }
+      .vcs-confirm-text {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 11px;
+        color: var(--text);
+        overflow-wrap: anywhere;
+      }
+      .vcs-stash-form {
+        gap: 4px;
+      }
+      .vcs-stash-form .vcs-input {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .vcs-diff-wrap {
+        margin: 0 6px 4px calc(6px + var(--depth, 0) * 12px);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        background: var(--bg);
+        overflow: auto;
+        max-height: 320px;
+      }
+      .vcs-diff {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        line-height: 1.45;
+        min-width: max-content;
+      }
+      .vcs-diff-line {
+        padding: 0 8px;
+        white-space: pre;
+      }
+      .vcs-diff-add {
+        color: var(--success);
+        background: color-mix(in srgb, var(--success) 12%, transparent);
+      }
+      .vcs-diff-del {
+        color: var(--danger);
+        background: color-mix(in srgb, var(--danger) 12%, transparent);
+      }
+      .vcs-diff-hunk {
+        color: var(--accent);
+        background: var(--bg-hover);
+        margin-top: 2px;
+      }
+      .vcs-diff-ctx {
+        color: var(--text-dim);
+      }
+      .vcs-diff-meta {
+        color: var(--text-faint);
+        font-style: italic;
+      }
+      .vcs-diff-empty {
+        padding: 6px 8px;
+        font-size: 10.5px;
+        color: var(--text-faint);
+      }
+      .vcs-commit-mark {
+        flex: 0 0 auto;
+        font-size: 8px;
+        color: var(--text-faint);
+      }
+      .vcs-commit-local .vcs-commit-mark,
+      .vcs-commit-mark-local {
+        color: var(--accent);
+      }
+      .vcs-commit-local {
+        color: var(--text);
+      }
+      .vcs-commit-hash {
+        flex: 0 0 auto;
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--text-faint);
+      }
+      .vcs-commit-subject {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .vcs-commit-time {
+        flex: 0 0 auto;
+        font-size: 10px;
+        color: var(--text-faint);
+      }
+      .vcs-tag {
+        flex: 0 0 auto;
+        font-size: 9px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        border-radius: 3px;
+        padding: 0 4px;
+        background: var(--bg-hover);
+        color: var(--text-faint);
+      }
+      .vcs-tag-local {
+        color: var(--accent);
+        border: 1px solid var(--accent);
+        background: transparent;
+      }
+      .vcs-empty {
+        padding: 4px 14px;
+        font-size: 11.5px;
+        color: var(--text-faint);
+      }
+      .vcs-empty-big {
+        padding: 18px 14px 6px;
+        font-size: 12px;
+      }
+      .vcs-error {
+        margin: 2px 6px 0;
+        padding: 5px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        color: var(--danger);
+        background: var(--bg-hover);
+        overflow-wrap: anywhere;
+      }
+      .vcs-footnote {
+        margin-top: 10px;
+        padding: 6px 14px 0;
+        border-top: 1px solid var(--border);
+        font-size: 10px;
+        line-height: 1.4;
+        color: var(--text-faint);
+      }
+
+      /* A transcript in the sidebar: what the worktree setup script printed. */
+      .sidebar-note {
+        position: relative;
+        margin: 2px 6px 0;
+        padding: 5px 22px 5px 8px;
+        border-radius: 6px;
+        background: var(--bg-hover);
+        border-left: 2px solid var(--success);
+      }
+      .sidebar-note pre {
+        margin: 0;
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        line-height: 1.4;
+        color: var(--text-dim);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        max-height: 120px;
+        overflow-y: auto;
+      }
+      .sidebar-note .sidebar-icon-btn {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+      }
+      /* A preference whose control wants the whole width: label above, box below. */
+      .prefs-row-stacked {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+      }
+      .prefs-textarea {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        font-family: var(--font-mono);
+        font-size: 11.5px;
+        line-height: 1.4;
+        color: var(--text);
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        outline: none;
+        resize: vertical;
+      }
+      .prefs-textarea:focus {
+        border-color: var(--accent);
+      }
     </style>
   </head>
   <body>
@@ -751,6 +1353,10 @@
            every poll, which would take a child grip with it. -->
       <div id="sidebar-grip" class="hidden"></div>
       <div id="panes"></div>
+      <!-- Source control, on the right. Same arrangement as the sidebar,
+           mirrored: grip first, since it sits on the panel's left edge. -->
+      <div id="vcs-grip" class="hidden"></div>
+      <aside id="vcs" class="hidden"></aside>
     </div>
     <!-- Classic scripts, not modules: both set globals the module below
          reads, so they must finish executing first. -->

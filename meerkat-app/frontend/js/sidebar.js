@@ -66,6 +66,7 @@ export function createSidebar(sessionManager) {
   let busy = false;
   let pendingRemove = null; // path awaiting confirmation
   let worktreeError = "";
+  let worktreeNote = ""; // the last setup script's transcript
   let jobError = "";
 
   // Last polled data, so a re-render triggered by a worktree interaction can
@@ -235,9 +236,12 @@ export function createSidebar(sessionManager) {
       : "";
 
     const errorRow = worktreeError ? `<div class="sidebar-error">${escapeHtml(worktreeError)}</div>` : "";
-    const busyRow = busy ? `<div class="sidebar-hint">working…</div>` : "";
+    const noteRow = worktreeNote
+      ? `<div class="sidebar-note"><pre>${escapeHtml(worktreeNote)}</pre><button class="sidebar-icon-btn" data-act="note-dismiss" title="Dismiss">×</button></div>`
+      : "";
+    const busyRow = busy ? `<div class="sidebar-hint">${creating ? "creating worktree and running setup…" : "working…"}</div>` : "";
 
-    return rows + createRow + errorRow + busyRow;
+    return rows + createRow + errorRow + noteRow + busyRow;
   }
 
   function rerender() {
@@ -297,6 +301,10 @@ export function createSidebar(sessionManager) {
             pendingRemove = null;
             rerender();
             break;
+          case "note-dismiss":
+            worktreeNote = "";
+            rerender();
+            break;
           case "remove-confirm":
             doRemove(el.dataset.path);
             break;
@@ -335,11 +343,20 @@ export function createSidebar(sessionManager) {
     rerender();
 
     try {
-      const path = await worktrees.createWorktree(sessionManager.activeCwd(), name.trim());
+      const created = await worktrees.createWorktree(sessionManager.activeCwd(), name.trim());
       creating = false;
       busy = false;
+      // The setup script's words, kept until dismissed: a failure here is the
+      // difference between a worktree that works and one that looks like it
+      // should, and the transcript is the only place the reason appears.
+      if (created.setupError) {
+        worktreeError = created.setupError;
+      }
+      if (created.setupRan && created.setupOutput) {
+        worktreeNote = created.setupOutput;
+      }
       // Opening it is the point of having created it.
-      await sessionManager.openTabAt(path);
+      await sessionManager.openTabAt(created.path);
     } catch (err) {
       busy = false;
       worktreeError = errorText(err);

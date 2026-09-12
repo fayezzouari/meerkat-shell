@@ -1,5 +1,6 @@
 import { createSessionManager } from "./js/sessionManager.js";
 import { createSidebar } from "./js/sidebar.js";
+import { createVcsPanel } from "./js/vcsPanel.js";
 import { createPreferencesOverlay } from "./js/preferencesOverlay.js";
 import { applyTheme, getThemeId } from "./js/themes.js";
 import { initAppearance } from "./js/appearance.js";
@@ -27,8 +28,21 @@ const sessionManager = createSessionManager({
 
 const sidebar = createSidebar(sessionManager);
 sessionManager.setSidebarToggle(() => sidebar.toggle());
-// Otherwise the pane list only catches up on the sidebar's 2s poll.
-sessionManager.setOnLayoutChange(() => sidebar.refresh());
+
+// Source control, on the right. Beta: a mirror of the focused pane's checkout.
+const vcsPanel = createVcsPanel(sessionManager);
+sessionManager.setVcsToggle(() => vcsPanel.toggle());
+
+// Otherwise the pane list only catches up on the sidebar's 2s poll, and the
+// source control panel would keep showing the previous pane's repo.
+sessionManager.setOnLayoutChange(() => {
+  sidebar.refresh();
+  vcsPanel.refresh({ force: true });
+});
+
+// The View menu (menu.go) mirrors the keyboard shortcuts.
+window.runtime.EventsOn("sidebar:toggle", () => sidebar.toggle());
+window.runtime.EventsOn("vcs:toggle", () => vcsPanel.toggle());
 
 const preferences = createPreferencesOverlay();
 // Emitted by the native "Preferences…" menu item — see menu.go.

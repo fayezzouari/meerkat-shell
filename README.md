@@ -50,7 +50,13 @@ background job from the CLI, then open the GUI and run `jobs` — it's the
 same job table, because the state never lived in the client. Close the pane
 your dev server is running in and it keeps serving: a job holding a listening
 socket outlives the window that started it, and the GUI's sidebar lists it with
-the port it's on, what it's costing in memory, and a button to kill it.
+the port it's on, what it's costing in memory, and a button to kill it. On the
+other side, `Cmd+G` opens source control (beta): staged, unstaged and untracked
+changes with stage/discard buttons and inline diffs, recent commits with the
+unpushed ones highlighted, stashes, and pull/push/sync. New worktrees can run a
+setup script — yours from Preferences, or the repo's own
+`.meerkat/worktree-setup.sh` — so a fresh checkout gets its `.env` and
+dependencies without anyone remembering to.
 
 ## Installing a build
 

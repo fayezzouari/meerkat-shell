@@ -32,8 +32,8 @@
         --surface: #1b1917;
         --surface-raised: #232120;
         --font-mono: "JetBrains Mono", Menlo, monospace;
-        --bg-image: url("/assets/meerkat-logo.png");
-        --bg-image-size: 220px auto;
+        /* Only a user-chosen wallpaper; the default mark is a canvas. */
+        --bg-image: none;
       }
 
       html,
@@ -66,12 +66,21 @@
         position: fixed;
         inset: 0;
         z-index: -1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         background-image: var(--bg-image);
-        background-size: var(--bg-image-size);
+        background-size: cover;
         background-repeat: no-repeat;
         background-position: center;
         opacity: 0.14;
         pointer-events: none;
+      }
+      /* The default mark, painted by backdrop.js. The renderer sizes the
+         element itself; this only supplies the ink via currentColor. */
+      #backdrop canvas {
+        display: block;
+        color: var(--text);
       }
 
       #tabbar {

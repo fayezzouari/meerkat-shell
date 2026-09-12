@@ -37,6 +37,28 @@
         --bg-image: none;
       }
 
+      /* Scrollbars, everywhere in the window. xterm's viewport is
+         `overflow-y: scroll`, and with a mouse attached macOS draws a permanent
+         track for it — in the light appearance's white, down the right edge of
+         a dark terminal. Styling the pseudo-elements takes it out of the
+         system's hands: a transparent track, a thumb only where there is
+         something to scroll, in the theme's own hairline colour. */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track,
+      ::-webkit-scrollbar-corner {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--text-faint);
+      }
+
       html,
       body {
         margin: 0;

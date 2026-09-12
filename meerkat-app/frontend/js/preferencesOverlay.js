@@ -102,7 +102,7 @@ export function createPreferencesOverlay() {
               : imgName
                 ? escapeHtml(imgName)
                 : isDefaultImg
-                  ? "Meerkat mark (default) — always painted faintly"
+                  ? "Meerkat mark (default) — animated dot field, always painted faintly"
                   : "None"
           }</div>
         </div>

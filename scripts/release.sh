@@ -91,12 +91,15 @@ if [[ $BUILD_APP -eq 1 ]]; then
   # Wails reads the bundle version from wails.json, not from the command line,
   # so stamp VERSION into it for the build and put the file back afterwards.
   # Without this every bundle says 1.0.0 in Finder and the About box.
+  # The backup lives outside $STAGE: the tarball is $STAGE, whole, and a copy
+  # left in there ships (0.3.0 to 0.3.2 carried a stray wails.json.orig).
   WAILS_JSON="$ROOT/meerkat-app/wails.json"
-  cp "$WAILS_JSON" "$STAGE/wails.json.orig"
-  trap 'cp "$STAGE/wails.json.orig" "$WAILS_JSON" 2>/dev/null; rm -rf "$STAGE"' EXIT
-  jq --arg v "$VERSION" '.info.productVersion = $v' "$STAGE/wails.json.orig" > "$WAILS_JSON"
+  WAILS_JSON_ORIG="$(mktemp)"
+  cp "$WAILS_JSON" "$WAILS_JSON_ORIG"
+  trap 'cp "$WAILS_JSON_ORIG" "$WAILS_JSON" 2>/dev/null; rm -f "$WAILS_JSON_ORIG"; rm -rf "$STAGE"' EXIT
+  jq --arg v "$VERSION" '.info.productVersion = $v' "$WAILS_JSON_ORIG" > "$WAILS_JSON"
   ( cd "$ROOT/meerkat-app" && wails build -clean ${WAILS_TAGS:+-tags "$WAILS_TAGS"} )
-  cp "$STAGE/wails.json.orig" "$WAILS_JSON"
+  cp "$WAILS_JSON_ORIG" "$WAILS_JSON"
   if [[ "$OS" == "darwin" ]]; then
     cp -R "$ROOT/meerkat-app/build/bin/meerkat-app.app" "$STAGE/Meerkat.app"
     # The bundle carries its own engine and command line. This is what makes a

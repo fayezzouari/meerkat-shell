@@ -101,6 +101,12 @@ export default function InstallMenu() {
             )),
           )}
 
+          {os === "macos" && (
+            <p className="install-pop-note">
+              No file for {OS_NAMES.macos}: the command is the install — a downloaded
+              app is quarantined and Meerkat is not notarized yet.
+            </p>
+          )}
           {os === "windows" && (
             <p className="install-pop-note">
               No native {OS_NAMES.windows} build — install it inside WSL2.

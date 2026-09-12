@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from "react";
 import {
   DOWNLOAD_FILES,
   DOWNLOAD_PLATFORMS,
+  REPO_URL,
   detectOs,
   downloadUrl,
   isLocalInstall,
@@ -128,6 +129,17 @@ export default function InstallChoice({ id, tone = "light" }) {
             </div>
           )}
 
+          {os === "macos" && (
+            <p className="dl-none">
+              On a Mac the command <em>is</em> the download. A file a browser fetches is
+              quarantined, and macOS will not open an app carrying that flag unless it is
+              signed with an Apple Developer ID and notarized — which Meerkat is not yet.
+              The command unpacks with <code>tar</code>, which sets no such flag, and
+              installs the same engine, app and command line. The tarballs are still on
+              the <a href={`${REPO_URL}/releases/latest`}>GitHub Release</a> if you want to
+              read them first.
+            </p>
+          )}
           {os === "windows" && (
             <p className="dl-none">
               There is no native Windows build — the engine's job control is POSIX to the
@@ -142,9 +154,8 @@ export default function InstallChoice({ id, tone = "light" }) {
 
           {others.length > 0 && (
             <p className="dl-others">
-              {os !== "windows" && os !== "unknown" && os !== "ios" && os !== "android"
-                ? "Or: "
-                : null}
+              {os === "macos" ? "For another machine: " : null}
+              {os === "linux" ? "Or: " : null}
               {others.map((asset, i) => (
                 <span key={asset.id}>
                   {i > 0 && " · "}
@@ -158,16 +169,9 @@ export default function InstallChoice({ id, tone = "light" }) {
 
           {mine.length > 0 && <DownloadSteps file={mine[0].file} />}
 
-          <p className="install-note dl-note">
-            {os === "macos" ? (
-              <>
-                Run them in Terminal, not the Finder — the Finder flags what it
-                unpacks and macOS then refuses to open the app.
-              </>
-            ) : (
-              <>Same install as the command above.</>
-            )}
-          </p>
+          {mine.length > 0 && (
+            <p className="install-note dl-note">Same install as the command above.</p>
+          )}
         </div>
       )}
     </div>

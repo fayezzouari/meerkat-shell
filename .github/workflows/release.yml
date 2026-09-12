@@ -210,15 +210,16 @@ jobs:
           name: meerkat-${{ matrix.target }}
           path: meerkat-site/public/downloads/latest/
 
-  # The download buttons on the site are static names pointing at
+  # install.sh and the site's download buttons point at static names under
   # releases/latest/download. If a build leg is missing, or is renamed, or never
-  # gets a runner, the release still publishes and the page still shows the
-  # button — it just 404s, on the visitor's machine, silently. That is how v0.1.0
-  # shipped with no .dmg at all. So the last word on a release is whether every
-  # file the page offers is actually on it.
+  # gets a runner, the release still publishes and the install still starts — it
+  # just 404s, on the visitor's machine, silently. That is how v0.1.0 shipped
+  # with no Intel build at all. So the last word on a release is whether every
+  # asset an install can ask for is actually on it.
   #
-  # The expected names come from the page's own data rather than a list kept here,
-  # because a list kept here is a list that drifts.
+  # The expected names come from the site's own data (RELEASE_ASSETS, which is
+  # every tarball install.sh downloads, file button or not) rather than a list
+  # kept here, because a list kept here is a list that drifts.
   verify:
     needs: [create-release, build]
     runs-on: ubuntu-latest
@@ -233,7 +234,7 @@ jobs:
         run: |
           expected="$(node --input-type=module -e "
             const m = await import('./meerkat-site/src/data/install.js');
-            console.log(Object.values(m.DOWNLOAD_FILES).flat().map((f) => f.file).join('\n'));
+            console.log(m.RELEASE_ASSETS.join('\n'));
           ")"
           actual="$(gh release view "$TAG" --json assets -q '.assets[].name')"
 
@@ -245,7 +246,7 @@ jobs:
             if printf '%s\n' "$actual" | grep -qxF "$file"; then
               echo "  ok      $file"
             else
-              echo "::error::$file is offered by the download page but is not on $TAG"
+              echo "::error::$file is something install.sh or the page can ask for, but it is not on $TAG"
               missing=1
             fi
           done <<< "$expected"

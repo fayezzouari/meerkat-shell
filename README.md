@@ -82,30 +82,39 @@ own WebKit data store, keyed by bundle id rather than by install, and nothing in
 `~/.meerkat` besides the program files is touched. It refuses to downgrade;
 `sh -s -- --reinstall` overrides both that and the up-to-date check.
 
-Or take a file instead. Every platform ships the same thing, a tarball with
-`install.sh` inside it, so an unpacked release installs itself with no network.
-Two commands, from Terminal:
+On Linux there is also a file: the page offers `meerkat-linux-amd64.tar.gz`,
+and every tarball carries `install.sh`, so an unpacked release installs itself
+with no network:
+
+```
+mkdir -p meerkat && tar -xzf ~/Downloads/meerkat-linux-amd64.tar.gz -C meerkat
+./meerkat/install.sh
+```
+
+The `mkdir` is not optional — the archive is flat, and `tar -C` will not create
+the directory it is pointed at.
+
+On macOS the command is the only install the page offers, and that is a
+Gatekeeper decision rather than a style one. A file a browser downloads is
+quarantined, and macOS refuses to open a quarantined app unless it is signed
+with an Apple Developer ID and notarized — which needs a paid developer account
+this project does not have. There is no free way around that: an unsigned
+`.dmg`, or a tarball a browser fetched and the Finder unpacked, both end in
+"Meerkat is damaged and can't be opened". `curl | sh` and `tar` set no
+quarantine flag, so they install the same `Meerkat.app` without the dialog. The
+macOS tarballs are still published on every GitHub Release, complete bundle
+inside, for anyone who wants to read before running:
 
 ```
 mkdir -p meerkat && tar -xzf ~/Downloads/meerkat-darwin-arm64.tar.gz -C meerkat
 ./meerkat/install.sh
 ```
 
-The `mkdir` is not optional — the archive is flat, and `tar -C` will not create
-the directory it is pointed at. Swap the filename for `meerkat-darwin-amd64` on
-an Intel Mac or `meerkat-linux-amd64` on Linux; nothing else changes.
-
-Use `tar`, not a double-click. On macOS that is not a style preference: the
-Finder passes the download's quarantine flag to everything it extracts, and
-macOS will not launch a quarantined app Apple has not notarized. `tar` does not
-set the flag, which is the same reason the curl install works.
-
-There is no `.dmg`. A disk image is quarantined the same way, and getting one
-past Gatekeeper needs a Developer ID certificate and a notarization round-trip;
-[`scripts/package-dmg.sh`](scripts/package-dmg.sh) and the release workflow are
-ready for it, waiting on a certificate rather than on code. The macOS tarball
-carries a complete `Meerkat.app` either way, engine and command line inside
-`Contents/Resources` included.
+When there is a certificate, the `.dmg` comes back: set the signing secrets
+listed under "Cutting a release", drop `--no-dmg` from the workflow, and add the
+image to `DOWNLOAD_FILES` in `meerkat-site/src/data/install.js`.
+[`scripts/package-dmg.sh`](scripts/package-dmg.sh) signs, notarizes and staples
+already.
 
 The page and the binaries are published separately. The page is a static deploy
 of `meerkat-site`; the release tarballs are GitHub Release assets, because each

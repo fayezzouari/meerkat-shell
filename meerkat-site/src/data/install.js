@@ -77,28 +77,28 @@ export function detectOs(ua = navigator.userAgent, platform = navigator.platform
   return "unknown";
 }
 
+// Every asset a release must carry: what install.sh downloads for each platform,
+// whether or not the page offers it as a file. The release workflow's verify job
+// checks the release against this list, so a build leg that silently produced
+// nothing fails the build rather than the visitor's install.
+export const RELEASE_ASSETS = [
+  "meerkat-darwin-arm64.tar.gz",
+  "meerkat-darwin-amd64.tar.gz",
+  "meerkat-linux-amd64.tar.gz",
+];
+
 export const DOWNLOAD_FILES = {
-  // A tarball on macOS too, not a .dmg. A disk image is the nicer object, but a
-  // browser marks its download quarantined and macOS will not open unsigned,
-  // un-notarized code that carries that flag — which needs an Apple Developer ID
-  // this project does not have. A tarball has no such problem, as long as it is
-  // unpacked with `tar` rather than by the Finder (see the note in
-  // InstallChoice). scripts/package-dmg.sh is still there for the day there is a
-  // certificate to sign with.
-  macos: [
-    {
-      id: "darwin-arm64",
-      file: "meerkat-darwin-arm64.tar.gz",
-      label: "Download for Mac",
-      detail: "Apple silicon · .tar.gz",
-    },
-    {
-      id: "darwin-amd64",
-      file: "meerkat-darwin-amd64.tar.gz",
-      label: "Download for Intel Mac",
-      detail: "Intel · .tar.gz",
-    },
-  ],
+  // Nothing for macOS on purpose. A file a browser downloads arrives quarantined,
+  // and macOS refuses to open an app that carries that flag unless it is signed
+  // with an Apple Developer ID and notarized — which this project does not have.
+  // A tarball only sidesteps it when unpacked with `tar` in a terminal, and
+  // everyone who chose a file over a command double-clicked it instead and met
+  // "Meerkat is damaged". So on macOS the command is the download: it uses tar,
+  // sets no flag, and installs the same three pieces. The tarballs are still on
+  // the GitHub Release for anyone who wants them. scripts/package-dmg.sh and the
+  // workflow's signing step are ready for the day there is a certificate; the
+  // .dmg comes back here then.
+  macos: [],
   linux: [
     {
       id: "linux-amd64",
@@ -109,5 +109,7 @@ export const DOWNLOAD_FILES = {
   ],
 };
 
-// Every OS the page has something to offer, in the order the chooser shows them.
-export const DOWNLOAD_PLATFORMS = ["macos", "linux"];
+// Every OS the page has a file for, in the order the chooser shows them.
+export const DOWNLOAD_PLATFORMS = Object.keys(DOWNLOAD_FILES).filter(
+  (p) => DOWNLOAD_FILES[p].length > 0,
+);

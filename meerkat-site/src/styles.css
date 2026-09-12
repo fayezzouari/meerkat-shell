@@ -953,6 +953,11 @@ h1 em {
   padding: 1.8rem 0 2.6rem;
   font-family: var(--mono); font-size: .76rem; color: var(--faint-dark);
 }
+.foot a {
+  color: inherit; text-decoration: underline; text-underline-offset: .2em;
+  text-decoration-color: var(--line-dark);
+}
+.foot a:hover { color: var(--dim-dark); text-decoration-color: currentColor; }
 
 /* ── narrow ───────────────────────────────────────────────────── */
 @media (max-width: 760px) {

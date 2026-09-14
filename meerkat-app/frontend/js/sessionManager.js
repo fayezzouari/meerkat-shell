@@ -136,7 +136,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
       if (paneCount > 1) {
         const badge = document.createElement("span");
         badge.className = "tab-badge";
-        badge.textContent = paneCount;
+        badge.textContent = String(paneCount);
         tabEl.appendChild(badge);
       }
 
@@ -160,6 +160,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     return cwd.split("/").filter(Boolean).pop() || "/";
   }
 
+  /** @param {{ initialCwd?: string }} opts */
   async function spawnLeaf({ initialCwd }) {
     const paneEl = document.createElement("div");
     paneEl.className = "pane";
@@ -183,6 +184,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
 
   // `cwd` opens the tab somewhere specific (the sidebar's worktree rows);
   // without it the new tab inherits the focused pane's directory.
+  /** @param {{ cwd?: string }} [opts] */
   async function newTab({ cwd } = {}) {
     const inheritCwd = cwd || activeSession()?.getCwd();
     const rootEl = document.createElement("div");

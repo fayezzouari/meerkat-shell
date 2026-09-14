@@ -297,7 +297,7 @@ export function createSidebar(sessionManager) {
         ${jobError ? `<div class="sidebar-error">${escapeHtml(jobError)}</div>` : ""}
       </div>
     `;
-    root.querySelectorAll(".sidebar-session").forEach((row) => {
+    /** @type {NodeListOf<HTMLElement>} */ (root.querySelectorAll(".sidebar-session")).forEach((row) => {
       row.addEventListener("click", () => sessionManager.switchTo(row.dataset.id));
     });
     wireActions();
@@ -306,7 +306,7 @@ export function createSidebar(sessionManager) {
   function wireActions() {
     // Delegated: the buttons sit inside clickable rows, so each handler has to
     // stop the row's own open-a-tab click from firing too.
-    root.querySelectorAll("[data-act]").forEach((el) => {
+    /** @type {NodeListOf<HTMLElement>} */ (root.querySelectorAll("[data-act]")).forEach((el) => {
       const act = el.dataset.act;
       el.addEventListener("click", (event) => {
         if (act !== "open") event.stopPropagation();
@@ -342,7 +342,7 @@ export function createSidebar(sessionManager) {
       });
     });
 
-    const input = root.querySelector("#wt-new-name");
+    const input = /** @type {HTMLInputElement | null} */ (root.querySelector("#wt-new-name"));
     if (input && !busy) {
       input.focus();
       input.addEventListener("keydown", (event) => {

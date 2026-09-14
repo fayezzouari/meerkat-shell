@@ -4,7 +4,7 @@ import { createHistory } from "./history.js";
 import * as daemon from "./daemonClient.js";
 import { locationFor } from "./promptInfo.js";
 import * as keymap from "./keymap.js";
-import { onAppearanceChange, terminalOptionsFor } from "./appearance.js";
+import { onAppearanceChange, terminalOptionsFor, stepFontSize, resetFontSize } from "./appearance.js";
 
 export async function createSession({
   container,
@@ -273,6 +273,21 @@ export async function createSession({
     if (keymap.matches(event, "newTab")) {
       event.preventDefault();
       onNewTabRequested();
+      return false;
+    }
+    if (keymap.matches(event, "zoomIn")) {
+      event.preventDefault();
+      stepFontSize(1);
+      return false;
+    }
+    if (keymap.matches(event, "zoomOut")) {
+      event.preventDefault();
+      stepFontSize(-1);
+      return false;
+    }
+    if (keymap.matches(event, "zoomReset")) {
+      event.preventDefault();
+      resetFontSize();
       return false;
     }
     if (keymap.matches(event, "toggleSidebar")) {

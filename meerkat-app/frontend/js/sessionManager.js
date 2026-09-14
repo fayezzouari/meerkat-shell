@@ -1,4 +1,5 @@
 import { createSession } from "./session.js";
+import { createDiffView, diffKey } from "./diffView.js";
 import { eachLeaf, leavesOf, findLeaf, replaceLeaf, removeLeaf } from "./splitTree.js";
 
 // Each tab holds a binary split tree, so splits can nest:
@@ -57,7 +58,8 @@ export function createSessionManager({ tabBarEl, panesEl }) {
 
   function buildNode(tab, node) {
     if (node.type === "leaf") {
-      node.paneEl.className = "pane";
+      // add, not assign: a diff view tags its pane with its own class.
+      node.paneEl.classList.add("pane");
       return node.paneEl;
     }
 
@@ -127,7 +129,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
       const leaf = findLeaf(tab.root, tab.activeLeafId) || leavesOf(tab.root)[0];
       const label = document.createElement("span");
       label.className = "tab-label";
-      label.textContent = labelFor(leaf?.session.getCwd() || "");
+      label.textContent = leaf?.session.title?.() ?? labelFor(leaf?.session.getCwd() || "");
       tabEl.appendChild(label);
 
       const paneCount = leavesOf(tab.root).length;
@@ -204,6 +206,55 @@ export function createSessionManager({ tabBarEl, panesEl }) {
 
     renderTab(tab);
     switchToTab(tab.id);
+  }
+
+  // A diff for one file, in a tab of its own. Asking for a file that is
+  // already open brings that tab forward and refreshes it instead.
+  function openDiff({ cwd, kind, path, word }) {
+    const key = diffKey({ cwd, kind, path });
+    const existing = tabs.find((t) => t.root?.type === "leaf" && t.root.session.key === key);
+    if (existing) {
+      switchToTab(existing.id);
+      existing.root.session.refresh();
+      return;
+    }
+
+    const rootEl = document.createElement("div");
+    rootEl.className = "tab-pane-root";
+    panesEl.appendChild(rootEl);
+    const tab = { id: `tab-${nextTabId++}`, rootEl, root: null, activeLeafId: null };
+    tabs.push(tab);
+
+    const paneEl = document.createElement("div");
+    paneEl.className = "pane";
+    const view = createDiffView({
+      container: paneEl,
+      cwd,
+      path,
+      kind,
+      word,
+      onNewTabRequested: () => newTab(),
+      onToggleSidebarRequested: () => onToggleSidebar(),
+      onToggleVcsRequested: () => onToggleVcs(),
+      onCloseRequested: () => closeTab(tab.id),
+    });
+    const leaf = { type: "leaf", id: view.id, session: view, paneEl };
+    paneEl.addEventListener("mousedown", () => focusLeaf(view.id));
+
+    tab.root = leaf;
+    tab.activeLeafId = leaf.id;
+    renderTab(tab);
+    switchToTab(tab.id);
+  }
+
+  // Called when the source control panel sees the checkout change, so an open
+  // diff tab follows the working tree rather than showing what it was.
+  function refreshDiffs() {
+    for (const tab of tabs) {
+      eachLeaf(tab.root, (leaf) => {
+        if (leaf.session.kind === "diff") leaf.session.refresh();
+      });
+    }
   }
 
   function showTabError(tab, err) {
@@ -298,15 +349,20 @@ export function createSessionManager({ tabBarEl, panesEl }) {
   }
 
   function closeTab(tabId) {
-    if (tabs.length <= 1) return; // always keep at least one tab open
     const index = tabs.findIndex((t) => t.id === tabId);
     if (index === -1) return;
+    const isDiff = tabs[index].root?.session?.kind === "diff";
+    // Always keep at least one terminal open. A lone diff tab may close; a
+    // fresh terminal takes its place below.
+    if (tabs.length <= 1 && !isDiff) return;
 
     const [tab] = tabs.splice(index, 1);
     eachLeaf(tab.root, (leaf) => leaf.session.dispose());
     tab.rootEl.remove();
 
-    if (activeTabId === tabId) {
+    if (tabs.length === 0) {
+      newTab();
+    } else if (activeTabId === tabId) {
       switchToTab(tabs[Math.max(0, index - 1)].id);
     } else {
       renderTabBar();
@@ -333,8 +389,9 @@ export function createSessionManager({ tabBarEl, panesEl }) {
       return;
     }
 
-    // Tab is now empty.
-    if (tabs.length <= 1) {
+    // Tab is now empty. Diff tabs don't count: the last *terminal* going
+    // away is what ends the session.
+    if (!tabs.some((t) => t.id !== tab.id && t.root?.session?.kind !== "diff")) {
       window.runtime.Quit();
       return;
     }
@@ -348,11 +405,14 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     }
   }
 
-  // One entry per pane, across every tab.
+  // One entry per terminal pane, across every tab. Diff tabs are left out:
+  // the sidebar lists shells and their jobs.
   function list() {
     const out = [];
     for (const tab of tabs) {
-      eachLeaf(tab.root, (leaf) => out.push({ id: leaf.id, cwd: leaf.session.getCwd() }));
+      eachLeaf(tab.root, (leaf) => {
+        if (leaf.session.kind !== "diff") out.push({ id: leaf.id, cwd: leaf.session.getCwd() });
+      });
     }
     return out;
   }
@@ -360,6 +420,8 @@ export function createSessionManager({ tabBarEl, panesEl }) {
   return {
     newTab,
     openTabAt: (cwd) => newTab({ cwd }),
+    openDiff,
+    refreshDiffs,
     switchTo,
     closeTab,
     list,

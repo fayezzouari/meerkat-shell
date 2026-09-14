@@ -126,36 +126,6 @@ function buildTree(files) {
 
 // Renders a unified diff as rows. Header lines (diff --git, index, ---, +++)
 // are dropped: the row above already says which file this is.
-function renderDiff(text) {
-  if (text === null) return `<div class="vcs-diff-empty">loading…</div>`;
-  if (!text) return `<div class="vcs-diff-empty">no textual changes (binary, mode, or identical)</div>`;
-  const rows = [];
-  for (const line of text.split("\n")) {
-    if (
-      line.startsWith("diff --git") ||
-      line.startsWith("index ") ||
-      line.startsWith("--- ") ||
-      line.startsWith("+++ ") ||
-      line.startsWith("new file mode") ||
-      line.startsWith("deleted file mode") ||
-      line.startsWith("similarity index") ||
-      line.startsWith("rename ") ||
-      line.startsWith("old mode") ||
-      line.startsWith("new mode")
-    ) {
-      continue;
-    }
-    if (line === "" ) continue;
-    let cls = "vcs-diff-ctx";
-    if (line.startsWith("@@")) cls = "vcs-diff-hunk";
-    else if (line.startsWith("+")) cls = "vcs-diff-add";
-    else if (line.startsWith("-")) cls = "vcs-diff-del";
-    else if (line.startsWith("\\")) cls = "vcs-diff-meta";
-    rows.push(`<div class="vcs-diff-line ${cls}">${escapeHtml(line)}</div>`);
-  }
-  return `<div class="vcs-diff">${rows.join("")}</div>`;
-}
-
 export function createVcsPanel(sessionManager) {
   const root = document.getElementById("vcs");
   const grip = document.getElementById("vcs-grip");
@@ -168,7 +138,7 @@ export function createVcsPanel(sessionManager) {
 
   // What the panel last knew, and its serialized form for change detection:
   // a poll that finds nothing new leaves the DOM alone, which is what keeps a
-  // half-read diff from jumping and an expanded folder from collapsing.
+  // an expanded folder from collapsing under the reader.
   let status = null;
   let statusKey = "";
   let statusCwd = "";
@@ -189,10 +159,6 @@ export function createVcsPanel(sessionManager) {
   // panel's headline for the rest of the session.
   let result = null; // { kind: "ok" | "error", text }
 
-  // Open diffs, keyed "staged:path" / "work:path" / "new:path". The cache
-  // holds the text (null while loading) so a re-render can paint it at once.
-  const expanded = new Set();
-  const diffs = new Map();
   const collapsedSections = new Set();
   const collapsedDirs = new Set();
 
@@ -235,30 +201,11 @@ export function createVcsPanel(sessionManager) {
     const code = kind === "staged" ? f.index : f.worktree;
     const word = STATUS_WORDS[code] || code;
     const { dir, name } = splitPath(f.path);
-    const open = expanded.has(key);
     const label =
       view === "tree"
         ? `<span class="vcs-file-name">${escapeHtml(name)}</span>`
         : `<span class="vcs-file-dir">${escapeHtml(dir)}</span><span class="vcs-file-name">${escapeHtml(name)}</span>`;
     const from = f.origPath ? `<span class="vcs-file-from" title="renamed from ${escapeHtml(f.origPath)}">← ${escapeHtml(splitPath(f.origPath).name)}</span>` : "";
-
-    const pathAttr = `data-path="${escapeHtml(f.path)}"`;
-    let buttons = "";
-    if (kind === "staged") {
-      buttons = iconBtn("unstage", "minus", "Unstage", pathAttr);
-    } else if (kind === "conflict") {
-      buttons = iconBtn("stage", "check", "Mark resolved (stage)", pathAttr);
-    } else {
-      buttons =
-        iconBtn("stage", "plus", "Stage", pathAttr) +
-        iconBtn(
-          "discard",
-          kind === "new" ? "trash" : "undo",
-          kind === "new" ? "Delete this untracked file" : "Discard changes",
-          `data-key="${escapeHtml(key)}"`,
-          "vcs-mini-danger",
-        );
-    }
 
     if (pendingDiscard === key) {
       const text = kind === "new" ? `Delete ${escapeHtml(name)}? It is not in git.` : `Discard changes to ${escapeHtml(name)}?`;
@@ -269,13 +216,11 @@ export function createVcsPanel(sessionManager) {
       </div>`;
     }
 
-    return `<div class="vcs-row vcs-file${open ? " vcs-file-open" : ""}" data-act="toggle-diff" data-key="${escapeHtml(key)}"
-                 style="--depth:${depth}" title="${escapeHtml(f.path)} — ${word}. Click to ${open ? "hide" : "show"} the diff.">
+    return `<div class="vcs-row vcs-file" data-act="open-diff" data-key="${escapeHtml(key)}" data-word="${escapeHtml(word)}"
+                 style="--depth:${depth}" title="${escapeHtml(f.path)} — ${word}. Click to open the diff in a tab.">
         <span class="vcs-status vcs-status-${escapeHtml(code === "?" ? "U" : code)}">${escapeHtml(code === "." ? "" : code)}</span>
         <span class="vcs-file-label">${label}${from}</span>
-        <span class="vcs-row-actions">${buttons}</span>
-      </div>
-      ${open ? `<div class="vcs-diff-wrap" style="--depth:${depth}">${renderDiff(diffs.has(key) ? diffs.get(key) : null)}</div>` : ""}`;
+      </div>`;
   }
 
   function renderFiles(kind, files) {
@@ -588,8 +533,10 @@ export function createVcsPanel(sessionManager) {
       case "toggle-dir":
         toggleIn(collapsedDirs, dataset.dir);
         return render();
-      case "toggle-diff":
-        return toggleDiff(dataset.key);
+      case "open-diff": {
+        const [kind, ...rest] = dataset.key.split(":");
+        return sessionManager.openDiff({ cwd: cwd(), kind, path: rest.join(":"), word: dataset.word });
+      }
       case "stage":
         return run("staging", () => vcs.stage(cwd(), [dataset.path]));
       case "unstage":
@@ -609,7 +556,6 @@ export function createVcsPanel(sessionManager) {
         pendingDiscard = null;
         const [kind, ...rest] = key.split(":");
         const path = rest.join(":");
-        expanded.delete(key);
         return run("discarding", () => vcs.discard(cwd(), [path], kind === "new"));
       }
       case "commit": {
@@ -633,7 +579,6 @@ export function createVcsPanel(sessionManager) {
         const message = stashMessage.trim();
         stashing = false;
         stashMessage = "";
-        expanded.clear();
         return run("stashing", () => vcs.stash(cwd(), message));
       }
       case "stash-pop":
@@ -662,30 +607,6 @@ export function createVcsPanel(sessionManager) {
   function toggleIn(set, key) {
     if (set.has(key)) set.delete(key);
     else set.add(key);
-  }
-
-  async function toggleDiff(key) {
-    if (expanded.has(key)) {
-      expanded.delete(key);
-      render();
-      return;
-    }
-    expanded.add(key);
-    diffs.set(key, null);
-    render();
-    await loadDiff(key);
-  }
-
-  async function loadDiff(key) {
-    const [kind, ...rest] = key.split(":");
-    const path = rest.join(":");
-    try {
-      const text = await vcs.diff(cwd(), path, kind === "staged", kind === "new");
-      diffs.set(key, text || "");
-    } catch (err) {
-      diffs.set(key, `error: ${errorText(err)}`);
-    }
-    if (expanded.has(key)) render();
   }
 
   // Every mutating action goes through here: one at a time, buttons disabled
@@ -730,11 +651,8 @@ export function createVcsPanel(sessionManager) {
       next = null;
     }
 
-    // A pane change is a new repo (or none): open diffs and folds belong to
-    // the old one.
+    // A pane change is a new repo (or none): the folds belong to the old one.
     if (dir !== statusCwd) {
-      expanded.clear();
-      diffs.clear();
       collapsedDirs.clear();
       statusCwd = dir;
     }
@@ -748,8 +666,8 @@ export function createVcsPanel(sessionManager) {
     if (changed && result?.kind === "ok" && !force) result = null;
     if (changed || force) {
       render();
-      // Open diffs may have changed with the status; refetch them quietly.
-      if (changed) for (const k of expanded) loadDiff(k);
+      // Open diff tabs may have changed with the status; refetch them quietly.
+      if (changed) sessionManager.refreshDiffs();
     }
   }
 

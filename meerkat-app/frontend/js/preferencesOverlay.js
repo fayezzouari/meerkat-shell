@@ -114,7 +114,7 @@ export function createPreferencesOverlay() {
   }
 
   function wireAppearance() {
-    const range = root.querySelector("#opacity-range");
+    const range = /** @type {HTMLInputElement} */ (root.querySelector("#opacity-range"));
     const value = root.querySelector("#opacity-value");
     range.addEventListener("input", () => {
       // Not a full render: rebuilding the slider mid-drag drops the
@@ -123,14 +123,15 @@ export function createPreferencesOverlay() {
       appearance.update({ opacity: Number(range.value) / 100 });
     });
 
-    root.querySelector("#font-family").addEventListener("change", (e) => {
-      appearance.update({ fontFamily: e.target.value });
+    const family = /** @type {HTMLSelectElement} */ (root.querySelector("#font-family"));
+    family.addEventListener("change", () => {
+      appearance.update({ fontFamily: family.value });
     });
 
-    const size = root.querySelector("#font-size");
+    const size = /** @type {HTMLInputElement} */ (root.querySelector("#font-size"));
     size.addEventListener("change", () => {
       const n = Math.max(appearance.FONT_SIZE_MIN, Math.min(appearance.FONT_SIZE_MAX, Number(size.value) || 13));
-      size.value = n;
+      size.value = String(n);
       appearance.update({ fontSize: n });
     });
 
@@ -183,7 +184,7 @@ export function createPreferencesOverlay() {
   }
 
   function wireWorktrees() {
-    const input = root.querySelector("#worktree-dir");
+    const input = /** @type {HTMLInputElement} */ (root.querySelector("#worktree-dir"));
     input.addEventListener("change", () => {
       worktrees.setDir(input.value);
       input.value = worktrees.getDir();
@@ -193,7 +194,7 @@ export function createPreferencesOverlay() {
       worktrees.resetDir();
       render();
     });
-    const setup = root.querySelector("#worktree-setup");
+    const setup = /** @type {HTMLTextAreaElement} */ (root.querySelector("#worktree-setup"));
     // Saved as typed: there is no apply step anywhere else in this overlay.
     setup.addEventListener("input", () => worktrees.setSetupScript(setup.value));
     // Keystrokes stay here rather than reaching a shortcut handler.
@@ -221,7 +222,7 @@ export function createPreferencesOverlay() {
     wireAppearance();
     wireWorktrees();
 
-    root.querySelectorAll(".theme-card").forEach((card) => {
+    /** @type {NodeListOf<HTMLElement>} */ (root.querySelectorAll(".theme-card")).forEach((card) => {
       card.addEventListener("click", (event) => {
         event.stopPropagation();
         applyTheme(card.dataset.themeId);
@@ -229,7 +230,7 @@ export function createPreferencesOverlay() {
       });
     });
 
-    root.querySelectorAll(".prefs-row").forEach((row) => {
+    /** @type {NodeListOf<HTMLElement>} */ (root.querySelectorAll(".prefs-row")).forEach((row) => {
       const id = row.dataset.id;
       row.querySelector('[data-action="change"]').addEventListener("click", (event) => {
         event.stopPropagation();

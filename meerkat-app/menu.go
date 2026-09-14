@@ -37,6 +37,16 @@ func buildMenu(app *App) *menu.Menu {
 	viewMenu.AddText("Toggle Source Control (Beta)", keys.CmdOrCtrl("g"), func(_ *menu.CallbackData) {
 		runtime.EventsEmit(app.ctx, "vcs:toggle")
 	})
+	viewMenu.AddSeparator()
+	viewMenu.AddText("Zoom In", keys.CmdOrCtrl("="), func(_ *menu.CallbackData) {
+		runtime.EventsEmit(app.ctx, "zoom:in")
+	})
+	viewMenu.AddText("Zoom Out", keys.CmdOrCtrl("-"), func(_ *menu.CallbackData) {
+		runtime.EventsEmit(app.ctx, "zoom:out")
+	})
+	viewMenu.AddText("Actual Size", keys.CmdOrCtrl("0"), func(_ *menu.CallbackData) {
+		runtime.EventsEmit(app.ctx, "zoom:reset")
+	})
 
 	root.Append(menu.WindowMenu())
 

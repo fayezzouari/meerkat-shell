@@ -94,6 +94,24 @@ export const ACTIONS = [
     default: { key: "g", meta: true },
   },
   {
+    id: "zoomIn",
+    label: "Zoom In",
+    description: "Makes the terminal font one step larger.",
+    default: { key: "=", meta: true },
+  },
+  {
+    id: "zoomOut",
+    label: "Zoom Out",
+    description: "Makes the terminal font one step smaller.",
+    default: { key: "-", meta: true },
+  },
+  {
+    id: "zoomReset",
+    label: "Actual Size",
+    description: "Resets the terminal font to its default size.",
+    default: { key: "0", meta: true },
+  },
+  {
     id: "toggleFullscreen",
     label: "Toggle Fullscreen",
     default: { key: "f", meta: true, ctrl: true },

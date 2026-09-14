@@ -1,7 +1,16 @@
 name: release
 
+# Three ways in, one pipeline:
+#   - a push to main whose commit message starts with "release:" — the
+#     continuous-delivery path. "release: 0.4.0" (or "release: v0.4.0") sets
+#     the version; a bare "release: ..." ships VERSION as committed. Any other
+#     push to main does nothing here (ci.yml still runs).
+#   - a pushed tag v*, for a release cut by hand.
+#   - workflow_dispatch, with a bump or an exact version.
+# ci.yml runs first in every case; nothing is tagged from a commit that fails it.
 on:
   push:
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
@@ -25,7 +34,16 @@ env:
   WAILS_VERSION: v2.13.0
 
 jobs:
+  ci:
+    # The gate: on a branch push only a "release:" commit goes further.
+    if: >-
+      github.event_name != 'push'
+      || github.ref_type == 'tag'
+      || startsWith(github.event.head_commit.message, 'release:')
+    uses: ./.github/workflows/ci.yml
+
   create-release:
+    needs: ci
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
@@ -36,9 +54,16 @@ jobs:
         env:
           BUMP: ${{ inputs.bump }}
           EXACT: ${{ inputs.version }}
+          MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           current="$(tr -d '[:space:]' < VERSION)"
           version="$current"
+
+          # A "release:" commit may name the version in its first line.
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF_TYPE" = branch ]; then
+            EXACT="$(printf '%s\n' "$MESSAGE" | head -n1 \
+              | sed -nE 's/^release:[[:space:]]*v?([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')"
+          fi
 
           if [ -n "$EXACT" ]; then
             version="${EXACT#v}"
@@ -70,7 +95,10 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "$current -> $version" >> "$GITHUB_STEP_SUMMARY"
 
-      - if: github.event_name == 'workflow_dispatch'
+      # On a branch (dispatch, or a "release:" push): commit the VERSION bump
+      # if there is one, then tag. Pushes made with the workflow's own token
+      # start no new workflow runs, so the tag does not re-enter here.
+      - if: github.ref_type == 'branch'
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |

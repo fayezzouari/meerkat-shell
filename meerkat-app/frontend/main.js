@@ -3,7 +3,7 @@ import { createSidebar } from "./js/sidebar.js";
 import { createVcsPanel } from "./js/vcsPanel.js";
 import { createPreferencesOverlay } from "./js/preferencesOverlay.js";
 import { applyTheme, getThemeId } from "./js/themes.js";
-import { initAppearance } from "./js/appearance.js";
+import { initAppearance, stepFontSize, resetFontSize } from "./js/appearance.js";
 import { initBackdrop } from "./js/backdrop.js";
 import { initWorktrees } from "./js/worktrees.js";
 
@@ -43,6 +43,9 @@ sessionManager.setOnLayoutChange(() => {
 // The View menu (menu.go) mirrors the keyboard shortcuts.
 window.runtime.EventsOn("sidebar:toggle", () => sidebar.toggle());
 window.runtime.EventsOn("vcs:toggle", () => vcsPanel.toggle());
+window.runtime.EventsOn("zoom:in", () => stepFontSize(1));
+window.runtime.EventsOn("zoom:out", () => stepFontSize(-1));
+window.runtime.EventsOn("zoom:reset", () => resetFontSize());
 
 const preferences = createPreferencesOverlay();
 // Emitted by the native "Preferences…" menu item — see menu.go.

@@ -567,6 +567,69 @@
         border-radius: 4px;
       }
 
+      /* A diff in a tab of its own: same rows as the source control panel,
+         given the whole pane. */
+      .pane-diff {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 6px 10px;
+        outline: none;
+      }
+      .diff-head {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        padding: 2px 4px;
+      }
+      .diff-head-kind {
+        flex: 0 0 auto;
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--warning);
+      }
+      .diff-head-path {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .diff-head-close {
+        flex: 0 0 auto;
+        padding: 0 6px;
+        font-family: inherit;
+        font-size: 14px;
+        line-height: 1.2;
+        color: var(--text-faint);
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .diff-head-close:hover {
+        color: var(--text);
+        background: var(--bg-hover);
+        border-color: var(--border);
+      }
+      .diff-body {
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+      .diff-body .vcs-diff {
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
       #prefs-overlay {
         /* fixed, not absolute: absolute made the modal's size depend on the
            page box, letting the blurred backdrop feed back into the
@@ -1227,9 +1290,6 @@
         background: var(--bg-hover);
         color: var(--text);
       }
-      .vcs-file-open {
-        color: var(--text);
-      }
       .vcs-status {
         flex: 0 0 16px;
         font-family: var(--font-mono);
@@ -1274,7 +1334,10 @@
         text-align: left;
       }
       .vcs-file-name {
-        flex: 0 0 auto;
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
         font-weight: 600;
         color: var(--text);
       }
@@ -1349,12 +1412,10 @@
         min-width: 0;
       }
       .vcs-diff-wrap {
-        margin: 0 6px 4px calc(6px + var(--depth, 0) * 12px);
         border: 1px solid var(--border);
         border-radius: 5px;
         background: var(--bg);
         overflow: auto;
-        max-height: 320px;
       }
       .vcs-diff {
         font-family: var(--font-mono);

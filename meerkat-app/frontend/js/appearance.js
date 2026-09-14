@@ -162,6 +162,17 @@ export function update(patch) {
   apply();
 }
 
+// Cmd+= / Cmd+- / Cmd+0. Clamped to the same range Preferences exposes, so
+// the two never disagree about what the font can be.
+export function stepFontSize(delta) {
+  const size = load().fontSize + delta;
+  update({ fontSize: Math.max(FONT_SIZE_MIN, Math.min(FONT_SIZE_MAX, size)) });
+}
+
+export function resetFontSize() {
+  update({ fontSize: DEFAULTS.fontSize });
+}
+
 export function resetAll() {
   settings = { ...DEFAULTS };
   persist();

@@ -473,18 +473,18 @@ export function createVcsPanel(sessionManager) {
   // ── wiring ─────────────────────────────────────────────────────────
 
   function wire() {
-    root.querySelectorAll("[data-act]").forEach((el) => {
+    /** @type {NodeListOf<HTMLElement>} */ (root.querySelectorAll("[data-act]")).forEach((el) => {
       el.addEventListener("click", (event) => {
         event.stopPropagation();
         handle(el.dataset.act, el);
       });
     });
 
-    const msg = root.querySelector("#vcs-commit-msg");
+    const msg = /** @type {HTMLTextAreaElement | null} */ (root.querySelector("#vcs-commit-msg"));
     if (msg) {
       msg.addEventListener("input", () => {
         commitMessage = msg.value;
-        const btn = root.querySelector('[data-act="commit"]');
+        const btn = /** @type {HTMLButtonElement | null} */ (root.querySelector('[data-act="commit"]'));
         if (btn) btn.disabled = !(status.staged?.length && commitMessage.trim() && !busy);
       });
       msg.addEventListener("keydown", (event) => {
@@ -497,7 +497,7 @@ export function createVcsPanel(sessionManager) {
       });
     }
 
-    const stashInput = root.querySelector("#vcs-stash-msg");
+    const stashInput = /** @type {HTMLInputElement | null} */ (root.querySelector("#vcs-stash-msg"));
     if (stashInput) {
       stashInput.focus();
       stashInput.addEventListener("input", () => (stashMessage = stashInput.value));
@@ -707,7 +707,7 @@ export function createVcsPanel(sessionManager) {
 
   // The dropdown closes the way menus do: a click anywhere else, or Escape.
   document.addEventListener("mousedown", (event) => {
-    if (menuOpen && !event.target.closest(".vcs-menu-wrap")) {
+    if (menuOpen && !(/** @type {Element} */ (event.target)).closest(".vcs-menu-wrap")) {
       menuOpen = false;
       render();
     }

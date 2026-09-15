@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="meerkat-site/public/meerkat-logo.png" alt="Meerkat logo" width="140">
+  <img src="meerkat-site/public/meerkat-logo.png" alt="Meerkat logo" width="70">
 </p>
 
 # Meerkat

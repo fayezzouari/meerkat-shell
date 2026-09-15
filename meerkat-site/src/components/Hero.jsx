@@ -29,7 +29,7 @@ export default function Hero() {
 
         <p className="proof">
           {VERSION && <span>v{VERSION}</span>}
-          <span>macOS · Linux</span>
+          <span>macOS</span>
           <a href={REPO_URL}>Source on GitHub</a>
         </p>
       </div>

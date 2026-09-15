@@ -15,7 +15,10 @@ export default function OsSupport() {
           </li>
         ))}
       </ul>
-      <p className="runs-on-foot">The installer picks the right build for your machine.</p>
+      <p className="runs-on-foot">
+        macOS only for now. We are working on making it available on other
+        operating systems.
+      </p>
     </aside>
   );
 }

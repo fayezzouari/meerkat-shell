@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="meerkat-site/public/meerkat-logo.png" alt="Meerkat logo" width="140">
+</p>
+
 # Meerkat
 
 Meerkat is a custom shell with its execution engine split out into a
@@ -14,6 +18,13 @@ meerkat-client (CLI)  ─┐
                         ├─  Unix socket, line protocol  ─►  meerkat-daemon (BEAM/Elixir)
 meerkat-app (GUI)     ─┘
 ```
+
+![Meerkat.app: a terminal tab open in a git worktree, the sidebar listing panes, worktrees and background jobs with their ports, and the source control panel showing staged, changed and untracked files plus unpushed commits](docs/screenshot.png)
+
+*Meerkat.app with the sidebar (`Cmd+B`) and source control (`Cmd+G`) open: the
+focused pane sits in a worktree the sidebar created, the jobs list shows two
+dev servers and the ports they hold, and the panel on the right is that
+worktree's own index and history.*
 
 ## Components
 

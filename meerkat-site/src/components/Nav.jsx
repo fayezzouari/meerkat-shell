@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useActiveSection } from "../hooks/useActiveSection.js";
 import CommandPalette from "./CommandPalette.jsx";
-import InstallMenu from "./InstallMenu.jsx";
 
 // The nav reads as a path bar, because that is what a shell puts where a website
 // puts links. One caret slides to whichever section you are actually in, so the
@@ -143,7 +142,7 @@ export default function Nav({ groundRef }) {
             <kbd>{shortcut}</kbd>
           </button>
 
-          <InstallMenu />
+          <a className="nav-install" href="#install">Install</a>
         </div>
       </header>
 

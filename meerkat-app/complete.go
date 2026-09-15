@@ -9,7 +9,7 @@ import (
 )
 
 // Mirrors MeerkatDaemon.Evaluator's @builtins, for completion only.
-var builtins = []string{"cd", "exit", "quit", "jobs", "fg", "bg", "kill", "stop"}
+var builtins = []string{"cd", "exit", "quit", "jobs", "fg", "bg", "kill", "stop", "engine"}
 
 var (
 	pathCmdsOnce sync.Once
@@ -101,12 +101,22 @@ func commandCandidates(prefix string) []string {
 	return rankedCandidates(names, strings.ToLower(prefix), func(s string) string { return s })
 }
 
+// The word arrives as typed, so a space inside a name is backslash-escaped
+// (`My\ Dir/`) and a leading `~` is the home directory. Candidates go back the
+// same way: the typed `~` is kept rather than expanded, and spaces and the
+// handful of characters the daemon's tokenizer or the shell would otherwise
+// split on or interpret are escaped — which is also what keeps the frontend's
+// word boundary (an unescaped space) intact.
 func pathCandidates(prefix string, cwd string) []string {
-	dirPart, filePart := filepath.Split(prefix)
+	dirPart, filePart := filepath.Split(unescapeWord(prefix))
 
 	lookupDir := dirPart
 	if dirPart == "" {
 		lookupDir = cwd
+	} else if strings.HasPrefix(dirPart, "~/") || dirPart == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			lookupDir = filepath.Join(home, strings.TrimPrefix(dirPart, "~"))
+		}
 	} else if !filepath.IsAbs(dirPart) {
 		lookupDir = filepath.Join(cwd, dirPart)
 	}
@@ -123,7 +133,7 @@ func pathCandidates(prefix string, cwd string) []string {
 		if strings.HasPrefix(e.Name(), ".") && !strings.HasPrefix(filePart, ".") {
 			continue
 		}
-		cand := dirPart + e.Name()
+		cand := escapeWord(dirPart + e.Name())
 		if e.IsDir() {
 			cand += "/"
 		}
@@ -132,4 +142,41 @@ func pathCandidates(prefix string, cwd string) []string {
 	}
 
 	return rankedCandidates(candidates, strings.ToLower(filePart), func(cand string) string { return names[cand] })
+}
+
+// Characters that end a word or mean something to the shell when unescaped.
+const wordSpecials = " \t\"'\\$&|;<>()*?[]#~`!"
+
+func escapeWord(s string) string {
+	var b strings.Builder
+	for i, r := range s {
+		// A leading `~` is the home directory and must stay bare; anywhere
+		// else it is literal only when escaped.
+		if strings.ContainsRune(wordSpecials, r) && !(r == '~' && i == 0) {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+func unescapeWord(s string) string {
+	var b strings.Builder
+	escaped := false
+	for _, r := range s {
+		if escaped {
+			b.WriteRune(r)
+			escaped = false
+			continue
+		}
+		if r == '\\' {
+			escaped = true
+			continue
+		}
+		b.WriteRune(r)
+	}
+	if escaped {
+		b.WriteByte('\\')
+	}
+	return b.String()
 }

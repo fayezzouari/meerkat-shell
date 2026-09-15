@@ -1,23 +1,55 @@
 defmodule MeerkatDaemon.Parser do
   @moduledoc """
-  Tokenizes a line (respecting single/double quotes) and splits it into
-  pipeline stages on `|`, plus a trailing `&` for background jobs. Every
-  pipeline stage execs as one OS process group, which is what job control
-  (`fg`/`bg`/`kill`/`stop`) attaches to.
+  Decides what a line *is* — a builtin, a command for the shell, or a parse
+  error — and whether it runs in the background. It does not interpret shell
+  syntax beyond that: everything that is not a builtin is handed to `/bin/sh -c`
+  verbatim, so `$HOME`, globs, redirections, `&&`, `;` and subshells all mean
+  what they mean in a shell rather than being silently passed as literal
+  arguments.
+
+  Tokenizing still happens, for three things: to know the first word (is it a
+  builtin?), to give builtins their arguments with quotes and backslash escapes
+  honoured (`cd "My Dir"`, `cd My\\ Dir`), and to catch an unterminated quote
+  before the shell does. A line containing a control operator (`|`, `&&`, `||`,
+  `;`) can never be a builtin, so its words are not kept.
+
+  Only a trailing `&` is the background marker. A lone `&` anywhere else is a
+  parse error rather than something surprising.
   """
 
-  @type stage :: {String.t(), [String.t()]}
   @type mode :: :foreground | :background
+  @type t :: %{words: [String.t()] | nil, command: String.t(), mode: mode}
 
-  @spec parse(String.t()) :: {:ok, [stage], mode} | {:error, String.t()}
-  def parse(line) do
-    with {:ok, tokens} <- tokenize(line),
-         {:ok, tokens, mode} <- take_background_marker(tokens) do
-      group(tokens, mode)
+  @spec parse(String.t()) :: {:ok, t} | {:error, String.t()}
+  def parse(line) when is_binary(line) do
+    if String.valid?(line) do
+      with {:ok, tokens} <- tokenize(String.to_charlist(line), [], []),
+           {:ok, tokens, mode} <- take_background_marker(tokens) do
+        {:ok, %{words: words(tokens), command: command_text(line, mode), mode: mode}}
+      end
+    else
+      {:error, "input is not valid UTF-8"}
     end
   end
 
-  defp tokenize(line), do: tokenize(String.to_charlist(line), [], [])
+  # The text the shell sees: the line with a trailing `&` removed.
+  defp command_text(line, :foreground), do: String.trim(line)
+
+  defp command_text(line, :background) do
+    line |> String.trim() |> String.replace_suffix("&", "") |> String.trim()
+  end
+
+  # `nil` when a control operator is present — the whole line belongs to the
+  # shell then, and no builtin can claim it.
+  defp words(tokens) do
+    if Enum.any?(tokens, &match?({:op, _}, &1)) do
+      nil
+    else
+      Enum.map(tokens, fn {:word, w} -> w end)
+    end
+  end
+
+  ## Tokenizer -------------------------------------------------------------
 
   defp tokenize([], [], tokens), do: {:ok, Enum.reverse(tokens)}
   defp tokenize([], word, tokens), do: {:ok, Enum.reverse([finish(word) | tokens])}
@@ -26,13 +58,16 @@ defmodule MeerkatDaemon.Parser do
     tokenize(rest, [], flush(word, tokens))
   end
 
-  defp tokenize([?| | rest], word, tokens) do
-    tokenize(rest, [], [:pipe | flush(word, tokens)])
-  end
+  defp tokenize([?&, ?& | rest], word, tokens), do: tokenize(rest, [], [{:op, "&&"} | flush(word, tokens)])
+  defp tokenize([?|, ?| | rest], word, tokens), do: tokenize(rest, [], [{:op, "||"} | flush(word, tokens)])
+  defp tokenize([?| | rest], word, tokens), do: tokenize(rest, [], [{:op, "|"} | flush(word, tokens)])
+  defp tokenize([?; | rest], word, tokens), do: tokenize(rest, [], [{:op, ";"} | flush(word, tokens)])
+  defp tokenize([?& | rest], word, tokens), do: tokenize(rest, [], [:background | flush(word, tokens)])
 
-  defp tokenize([?& | rest], word, tokens) do
-    tokenize(rest, [], [:background | flush(word, tokens)])
-  end
+  # A backslash outside quotes escapes the next character; a trailing one is
+  # kept literally rather than rejected — the shell will have its own opinion.
+  defp tokenize([?\\, c | rest], word, tokens), do: tokenize(rest, [c | word], tokens)
+  defp tokenize([?\\], word, tokens), do: tokenize([], [?\\ | word], tokens)
 
   defp tokenize([?" | rest], word, tokens) do
     case take_quoted(rest, ?") do
@@ -61,8 +96,6 @@ defmodule MeerkatDaemon.Parser do
 
   defp finish(word), do: {:word, word |> Enum.reverse() |> List.to_string()}
 
-  # Only a trailing `&` is the background marker; anywhere else is a parse
-  # error rather than something surprising.
   defp take_background_marker(tokens) do
     case List.last(tokens) do
       :background ->
@@ -81,38 +114,5 @@ defmodule MeerkatDaemon.Parser do
           {:ok, tokens, :foreground}
         end
     end
-  end
-
-  defp group([], mode), do: {:ok, [], mode}
-
-  defp group(tokens, mode) do
-    tokens
-    |> split_on_pipe()
-    |> Enum.reduce_while({:ok, []}, fn stage_tokens, {:ok, acc} ->
-      case stage_tokens do
-        [] ->
-          {:halt, {:error, "empty pipeline stage"}}
-
-        [{:word, cmd} | rest] ->
-          args = Enum.map(rest, fn {:word, w} -> w end)
-          {:cont, {:ok, [{cmd, args} | acc]}}
-      end
-    end)
-    |> case do
-      {:ok, stages} -> {:ok, Enum.reverse(stages), mode}
-      error -> error
-    end
-  end
-
-  defp split_on_pipe(tokens) do
-    Enum.chunk_while(
-      tokens,
-      [],
-      fn
-        :pipe, acc -> {:cont, Enum.reverse(acc), []}
-        token, acc -> {:cont, [token | acc]}
-      end,
-      fn acc -> {:cont, Enum.reverse(acc), []} end
-    )
   end
 end

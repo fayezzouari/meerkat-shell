@@ -41,7 +41,11 @@ defmodule MeerkatDaemon.Terminal do
   # The `tty` at the front is how the slave device gets named: erlexec reports
   # no pty path, and the process itself is the only thing that can see it.
   # `exec` so that the shell is replaced rather than left waiting on a child.
-  @anchor ~c"tty; trap '' INT; exec sleep 2147483647"
+  #
+  # Run as an argv, not a string: for a string erlexec uses whatever `$SHELL`
+  # the engine inherited — unset under launchd, `fish` for some users — and
+  # this script is POSIX sh.
+  @anchor ["/bin/sh", "-c", "tty; trap '' INT; exec sleep 2147483647"]
 
   # The anchor prints its device immediately; anything slower than this is a
   # machine in trouble, and a connection is better off failing than hanging.
@@ -112,7 +116,7 @@ defmodule MeerkatDaemon.Terminal do
   """
   @spec restore(t) :: any()
   def restore(%{tty: tty}) do
-    :exec.run(~c"stty sane", [{:stdin, tty}, {:stdout, tty}, {:stderr, tty}])
+    :exec.run(["/bin/sh", "-c", "stty sane"], [{:stdin, tty}, {:stdout, tty}, {:stderr, tty}])
   end
 
   @doc "Closes the terminal. Any command still holding its fds loses them."

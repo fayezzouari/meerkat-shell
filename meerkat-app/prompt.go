@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // HomeDir is best-effort: "" means the frontend shows the cwd unshortened.
@@ -46,9 +48,19 @@ func (a *App) GitInfo(cwd string) GitStatus {
 	return GitStatus{Repo: filepath.Base(root), Branch: branch, Subpath: subpath}
 }
 
+// Bounded, because the prompt waits on this and the pane accepts no keystrokes
+// until the prompt is drawn: a git that hangs (a stalled network mount, a
+// wedged fsmonitor or credential helper) would otherwise freeze the pane for
+// good. On a timeout the prompt simply shows the bare directory.
 func runGit(cwd string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), gitQueryTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = cwd
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0")
+	// Otherwise Output() waits for a child holding the pipe (a hook, ssh) even
+	// after git itself was killed on timeout.
+	cmd.WaitDelay = time.Second
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err

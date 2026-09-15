@@ -7,7 +7,9 @@ defmodule MeerkatDaemon.Connection do
   first byte is a type tag, the rest is payload):
 
     client -> daemon:
-      "L" <> line   one full line of shell input
+      "L" <> line   one full line of shell input. Lines that arrive while a
+                    foreground job is running are queued and run in order
+                    once it finishes — never concurrently on the same pty
       "I" <> bytes  raw bytes typed on the connection's terminal (only
                     meaningful while a job is running; ignored otherwise).
                     A lone 0x03 is delivered to the running job as SIGINT
@@ -20,6 +22,7 @@ defmodule MeerkatDaemon.Connection do
       "O" <> text   stdout line (builtins only — jobs/errors, not pty output)
       "E" <> text   stderr line (builtins only)
       "D" <> cwd    sent on connect, and again whenever `cd` changes it
+      "H" <> text   sent once after the first "D": which engine this is
       "P" <> bytes  raw pty output, unbuffered — curses programs redraw with
                     "\\r" and escapes that may never contain a "\\n"
       "X" <> code   command complete, exit code as text
@@ -55,7 +58,11 @@ defmodule MeerkatDaemon.Connection do
      %{
        socket: socket,
        cwd: System.get_env("HOME", "/"),
+       # Where `cd -` goes back to; nil until the first `cd`.
+       oldpwd: nil,
        current: nil,
+       # Lines received while `current` was set, oldest first.
+       pending: [],
        winsz: {24, 80},
        # Opened on the first foreground command, not here: a connection that
        # only ever runs builtins never needs a pty. See ensure_terminal/1.
@@ -77,6 +84,14 @@ defmodule MeerkatDaemon.Connection do
 
   def handle_info({:tcp, socket, packet}, state) do
     case packet do
+      # A second line while a job holds the pty would start another command on
+      # the same terminal, and its :DOWN would then be the one `current` tracks
+      # — the first job's exit would never produce an "X". Queue it instead;
+      # run_pending/1 picks it up from the :DOWN handler.
+      <<?L, line::binary>> when state.current != nil ->
+        :inet.setopts(socket, active: :once)
+        {:noreply, %{state | pending: state.pending ++ [line]}}
+
       <<?L, line::binary>> ->
         case dispatch(line, state) do
           {:continue, state} ->
@@ -135,12 +150,24 @@ defmodule MeerkatDaemon.Connection do
         %{current: %{os_pid: os_pid, pid: pid, id: id}} = state
       ) do
     exit_code = Evaluator.decode_exit(reason)
-    JobManager.finish_job(id, exit_code)
+    # A finished foreground command has nothing left to say: its output went to
+    # the pty as it ran, and `jobs` listing every `ls` ever typed as `done`
+    # buries the background jobs the table is for.
+    JobManager.remove(id)
     # 128+n means a signal, so the program did not run its own cleanup — and the
     # terminal it may have put into raw mode is shared now, and stays behind.
     if exit_code >= 128 and state.term, do: Terminal.restore(state.term)
     send_frame(state.socket, ?X, Integer.to_string(exit_code))
-    {:noreply, %{state | current: nil}}
+    run_pending(%{state | current: nil})
+  end
+
+  # The anchor holding this connection's pty is gone — killed by hand, or the
+  # pty was torn down. Forget the terminal rather than handing its stale device
+  # to the next command: macOS recycles ttys numbers, so that path may by then
+  # belong to someone else's terminal. ensure_terminal/1 opens a fresh one.
+  def handle_info({:DOWN, os_pid, :process, pid, reason}, %{term: %{os_pid: os_pid, pid: pid}} = state) do
+    Logger.warning("terminal anchor exited (#{inspect(reason)}); reopening on the next command")
+    {:noreply, %{state | term: nil}}
   end
 
   # Stale messages from a job we no longer track — ignore rather than crash.
@@ -173,8 +200,7 @@ defmodule MeerkatDaemon.Connection do
           case Ports.listening(os_pid) do
             [] ->
               :exec.stop(pid)
-              # 143 = 128 + SIGTERM, which :exec.stop/1 sends before escalating.
-              JobManager.finish_job(id, 143)
+              JobManager.remove(id)
               nil
 
             _ports ->
@@ -200,9 +226,10 @@ defmodule MeerkatDaemon.Connection do
   # are not its foreground process group — they are not session leaders, which
   # is exactly what keeps sudo's credentials valid across commands — so the line
   # discipline has nothing to signal. Delivering it here is what a terminal
-  # would have done anyway.
+  # would have done anyway: to the job's whole process group, so a pipeline's
+  # every stage gets it and not just the shell waiting on them.
   defp forward_input(<<3>>, %{current: %{os_pid: os_pid}}) do
-    :exec.kill(os_pid, :sigint)
+    Evaluator.signal_group(os_pid, :sigint)
   end
 
   # Only while something is running: with no job, the client is echoing locally,
@@ -229,9 +256,18 @@ defmodule MeerkatDaemon.Connection do
 
   defp ensure_terminal(state), do: state
 
-  defp dispatch("", state) do
-    send_frame(state.socket, ?X, "0")
-    {:continue, state}
+  # Runs the next queued line, if any. Called with `current` already cleared.
+  # A queued `exit` closes the socket the same way a typed one does.
+  defp run_pending(%{pending: []} = state), do: {:noreply, state}
+
+  defp run_pending(%{pending: [line | rest]} = state) do
+    case dispatch(line, %{state | pending: rest}) do
+      {:continue, %{current: nil} = state} -> run_pending(state)
+      {:continue, state} -> {:noreply, state}
+      {:stop, state} ->
+        :gen_tcp.close(state.socket)
+        {:stop, :normal, state}
+    end
   end
 
   defp dispatch(line, state) do
@@ -241,27 +277,37 @@ defmodule MeerkatDaemon.Connection do
         send_frame(state.socket, ?X, "1")
         {:continue, state}
 
-      {:ok, [], _mode} ->
+      {:ok, %{command: ""}} ->
         send_frame(state.socket, ?X, "0")
         {:continue, state}
 
-      {:ok, stages, mode} ->
+      {:ok, parsed} ->
         emit = fn
           :stdout, text -> send_frame(state.socket, ?O, text)
           :stderr, text -> send_frame(state.socket, ?E, text)
         end
 
-        state = if mode == :foreground, do: ensure_terminal(state), else: state
+        state =
+          if parsed.mode == :foreground and not Evaluator.builtin?(parsed),
+            do: ensure_terminal(state),
+            else: state
 
-        case Evaluator.run(stages, state.cwd, mode, emit, state.term) do
+        case Evaluator.run(parsed, state.cwd, emit, state.term, oldpwd: state.oldpwd) do
           {:exit, _cwd, _code} ->
             send_frame(state.socket, ?X, "0")
             {:stop, state}
 
           {:ok, new_cwd, code} ->
-            if new_cwd != state.cwd, do: send_frame(state.socket, ?D, new_cwd)
+            state =
+              if new_cwd != state.cwd do
+                send_frame(state.socket, ?D, new_cwd)
+                %{state | cwd: new_cwd, oldpwd: state.cwd}
+              else
+                state
+              end
+
             send_frame(state.socket, ?X, Integer.to_string(code))
-            {:continue, %{state | cwd: new_cwd}}
+            {:continue, state}
 
           {:running, id, pid, os_pid, cwd} ->
             {:continue, %{state | current: %{id: id, pid: pid, os_pid: os_pid}, cwd: cwd}}

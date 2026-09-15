@@ -10,22 +10,6 @@ export const OPERATING_SYSTEMS = [
     // Simplified marks — one path each, drawn on the same 24px grid.
     path: "M16.4 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.7.8-3.4.8s-1.8-.8-3-.8c-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.3 2.9 2.3s1.6-.8 3.1-.8 1.8.7 3 .7 2-1.1 2.8-2.2c.9-1.3 1.3-2.5 1.3-2.6-.1 0-2.5-1-2.5-3.7ZM14.3 5.2c.6-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.1 1.8-1 2.9 1.1.1 2.2-.6 2.8-1.4Z",
   },
-  {
-    id: "linux",
-    name: "Linux",
-    detail: "Both the terminal app and the command line.",
-    path: "M12 2c-1.9 0-3 1.6-3 3.6 0 1 .1 1.9-.3 2.7-.5 1-1.5 2-2.3 3.5-.7 1.3-1.1 2.8-1.6 3.6-.4.7-1 1-.9 1.7.1.6.7.8 1.4 1 .8.2 1.3.7 1.9 1.2.6.5 1.3.9 2.4.9 1.4 0 2.2-.6 2.9-1.1.6-.5 1.1-.9 2-1.1.8-.2 1.5-.4 1.6-1.1.1-.7-.5-1-.9-1.8-.4-.8-.8-2.2-1.5-3.5-.8-1.5-1.8-2.4-2.3-3.4-.4-.8-.3-1.7-.3-2.7C15 3.6 13.9 2 12 2Zm-1.3 3.1c.4 0 .7.5.7 1s-.3 1-.7 1-.7-.5-.7-1 .3-1 .7-1Zm2.6 0c.4 0 .7.5.7 1s-.3 1-.7 1-.7-.5-.7-1 .3-1 .7-1ZM12 8.2c.9 0 1.9.6 1.9 1 0 .3-.4.5-.8.8-.4.3-.8.6-1.1.6s-.7-.3-1.1-.6c-.4-.3-.8-.5-.8-.8 0-.4 1-1 1.9-1Z",
-  },
-  {
-    id: "windows",
-    name: "Windows 10/11",
-    // Not "build from source": the engine's job control is erlexec, whose port
-    // program is POSIX (fork/execve/setsid/termios) and does not build on
-    // Windows at all. WSL2 is the honest answer, and it is a real one — inside
-    // it Meerkat is the Linux build.
-    detail: "Under WSL2 for now.",
-    path: "M3 4.6 10.6 3.6v7.9H3V4.6Zm0 8.1h7.6v7.8L3 19.4v-6.7Zm8.9-9.3L21.5 2v9.5h-9.6V3.4Zm0 9.3h9.6V22l-9.6-1.4v-7.9Z",
-  },
 ];
 
 export const COMPONENTS = [

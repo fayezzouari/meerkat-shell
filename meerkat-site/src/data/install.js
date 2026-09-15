@@ -1,12 +1,8 @@
 const FALLBACK_HOST = "meerkat.fayez-zouari.tn";
 const CONFIGURED = typeof __MEERKAT_SITE_URL__ === "string" ? __MEERKAT_SITE_URL__ : "";
 
-// Both baked in by vite.config.js: the version from the repo's VERSION file, and
-// the same download directory install.sh defaults to. The page and the installer
-// must agree on where the assets live, or the two install paths ship different
-// builds.
+// Baked in by vite.config.js from the repo's VERSION file.
 export const VERSION = typeof __MEERKAT_VERSION__ === "string" ? __MEERKAT_VERSION__ : "";
-const DOWNLOADS = typeof __MEERKAT_DOWNLOAD_URL__ === "string" ? __MEERKAT_DOWNLOAD_URL__ : "";
 
 export const REPO_URL = "https://github.com/fayezzouari/meerkat-shell";
 
@@ -45,38 +41,6 @@ export function isLocalInstall(origin = window.location.origin) {
   return isLocal(origin);
 }
 
-/* ── downloadable files ─────────────────────────────────────────────
-   The curl line is one path to a working install; a downloaded file is the
-   other. They install the same three pieces — engine, terminal app, command
-   line — so which one someone picks is a matter of taste, not of what they end
-   up with. */
-
-// A release directory, matching install.sh's DEFAULT_DOWNLOAD_URL. Locally the
-// site serves its own builds, so a dev download is the build just made.
-export function downloadsBase(origin = window.location.origin) {
-  if (isLocal(origin)) return `${origin.replace(/\/+$/, "")}/downloads/latest`;
-  return DOWNLOADS || `${REPO_URL}/releases/latest/download`;
-}
-
-export function downloadUrl(file, origin = window.location.origin) {
-  return `${downloadsBase(origin)}/${file}`;
-}
-
-// What we can actually tell from a browser. Architecture is deliberately absent:
-// a browser cannot distinguish Apple silicon from Intel reliably (an Intel build
-// under Rosetta and a native arm64 build report the same thing), so macOS offers
-// both rather than guessing wrong and handing someone a binary that will not run.
-export function detectOs(ua = navigator.userAgent, platform = navigator.platform ?? "") {
-  const s = `${ua} ${platform}`;
-  // iOS/iPadOS before macOS: recent iPads claim to be a Mac in the UA string.
-  if (/iPhone|iPad|iPod/.test(s)) return "ios";
-  if (/Android/.test(s)) return "android";
-  if (/Mac/.test(s)) return "macos";
-  if (/Win/.test(s)) return "windows";
-  if (/Linux|X11|CrOS/.test(s)) return "linux";
-  return "unknown";
-}
-
 // Every asset a release must carry: what install.sh downloads for each platform,
 // whether or not the page offers it as a file. The release workflow's verify job
 // checks the release against this list, so a build leg that silently produced
@@ -86,30 +50,3 @@ export const RELEASE_ASSETS = [
   "meerkat-darwin-amd64.tar.gz",
   "meerkat-linux-amd64.tar.gz",
 ];
-
-export const DOWNLOAD_FILES = {
-  // Nothing for macOS on purpose. A file a browser downloads arrives quarantined,
-  // and macOS refuses to open an app that carries that flag unless it is signed
-  // with an Apple Developer ID and notarized — which this project does not have.
-  // A tarball only sidesteps it when unpacked with `tar` in a terminal, and
-  // everyone who chose a file over a command double-clicked it instead and met
-  // "Meerkat is damaged". So on macOS the command is the download: it uses tar,
-  // sets no flag, and installs the same three pieces. The tarballs are still on
-  // the GitHub Release for anyone who wants them. scripts/package-dmg.sh and the
-  // workflow's signing step are ready for the day there is a certificate; the
-  // .dmg comes back here then.
-  macos: [],
-  linux: [
-    {
-      id: "linux-amd64",
-      file: "meerkat-linux-amd64.tar.gz",
-      label: "Download for Linux",
-      detail: "x86-64 · .tar.gz",
-    },
-  ],
-};
-
-// Every OS the page has a file for, in the order the chooser shows them.
-export const DOWNLOAD_PLATFORMS = Object.keys(DOWNLOAD_FILES).filter(
-  (p) => DOWNLOAD_FILES[p].length > 0,
-);

@@ -259,7 +259,14 @@ func main() {
 			}
 		}
 		if closed {
-			break // daemon closed the socket (we sent exit/quit)
+			break // daemon closed the socket
+		}
+		// The daemon answers `exit` with X 0 and then closes; without this the
+		// prompt would come back once more and only the next line's failed
+		// read would end the loop.
+		switch strings.TrimSpace(line) {
+		case "exit", "quit":
+			return
 		}
 	}
 }

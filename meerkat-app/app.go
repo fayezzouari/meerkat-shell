@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"meerkat-app/daemonclient"
 
@@ -26,7 +27,6 @@ type App struct {
 	mu       sync.Mutex
 	sessions map[string]*daemonclient.Client
 	nextID   int
-	daemonUp bool // true once any NewSession call has connected
 }
 
 func NewApp() *App {
@@ -61,24 +61,30 @@ type SessionInfo struct {
 }
 
 // NewSession opens a daemon connection for one tab.
+//
+// Always through Connect, which dials first and only spawns an engine when
+// nothing answers: remembering "the daemon is up" from an earlier session made
+// the Retry button useless after an engine restart or crash, because it kept
+// dialling a socket nobody was listening on and never started a new one.
 func (a *App) NewSession() (SessionInfo, error) {
-	a.mu.Lock()
-	spawnIfMissing := !a.daemonUp
-	a.mu.Unlock()
-
-	var client *daemonclient.Client
-	var err error
-	if spawnIfMissing {
-		client, err = daemonclient.Connect()
-	} else {
-		client, err = daemonclient.ConnectExisting()
-	}
+	client, err := daemonclient.Connect()
 	if err != nil {
 		return SessionInfo{}, err
 	}
 
+	// The engine introduces itself with the cwd before anything else; a
+	// connection that closes (or says nothing for seconds) before that is not
+	// one a tab can be built on, and reporting it here is what puts the error
+	// in the tab instead of a pane that accepts input and never answers.
+	client.SetDeadline(time.Now().Add(5 * time.Second))
+	msgType, payload, ok := client.ReadFrame()
+	client.SetDeadline(time.Time{})
+	if !ok {
+		client.Close()
+		return SessionInfo{}, fmt.Errorf("the engine accepted the connection but sent nothing")
+	}
 	cwd := ""
-	if msgType, payload, ok := client.ReadFrame(); ok && msgType == daemonclient.MsgCwd {
+	if msgType == daemonclient.MsgCwd {
 		cwd = string(payload)
 	}
 
@@ -86,7 +92,6 @@ func (a *App) NewSession() (SessionInfo, error) {
 	a.nextID++
 	id := fmt.Sprintf("s%d", a.nextID)
 	a.sessions[id] = client
-	a.daemonUp = true
 	a.mu.Unlock()
 
 	go a.readLoop(id, client)
@@ -122,6 +127,11 @@ func (a *App) readLoop(id string, client *daemonclient.Client) {
 	for {
 		msgType, payload, ok := client.ReadFrame()
 		if !ok {
+			// The frontend may already have removed it via CloseSession; either
+			// way the entry must not outlive the connection.
+			a.mu.Lock()
+			delete(a.sessions, id)
+			a.mu.Unlock()
 			runtime.EventsEmit(a.ctx, "daemon:closed", map[string]string{"id": id})
 			return
 		}
@@ -197,6 +207,7 @@ func (a *App) KillJobById(jobId int) string {
 		return err.Error()
 	}
 	defer client.Close()
+	client.SetDeadline(time.Now().Add(sidebarQueryTimeout))
 
 	client.ReadFrame() // discard the initial "D:<cwd>" banner
 
@@ -281,6 +292,10 @@ func (a *App) ListJobs() ([]JobInfo, error) {
 		return nil, err
 	}
 	defer client.Close()
+	// The sidebar polls this every 2s and gives up on its side after 4s; without
+	// a deadline each abandoned poll would leave a goroutine blocked in
+	// ReadFrame and a socket open for the life of the app.
+	client.SetDeadline(time.Now().Add(sidebarQueryTimeout))
 
 	client.ReadFrame() // discard the initial "D:<cwd>" banner
 
@@ -288,10 +303,18 @@ func (a *App) ListJobs() ([]JobInfo, error) {
 		return nil, err
 	}
 
-	var jobs []JobInfo
+	// Never nil: a nil slice marshals as JSON null, and the sidebar calls
+	// .filter on the result.
+	jobs := []JobInfo{}
 	for {
 		msgType, payload, ok := client.ReadFrame()
-		if !ok || msgType == daemonclient.MsgExit {
+		if !ok {
+			if len(jobs) == 0 {
+				return nil, fmt.Errorf("the engine did not answer `jobs` in time")
+			}
+			break
+		}
+		if msgType == daemonclient.MsgExit {
 			break
 		}
 		if msgType == daemonclient.MsgStdout {
@@ -438,6 +461,9 @@ func (a *App) shutdown(_ context.Context) {
 
 // The encoded string is ~4/3 the file size and is held in memory by both Go
 // and the webview, so an unbounded read here would wedge the app.
+// sidebarQueryTimeout bounds the sidebar's short-lived `jobs`/`kill` connections.
+const sidebarQueryTimeout = 3 * time.Second
+
 const maxBackgroundImageBytes = 16 << 20 // 16 MiB
 
 // PickBackgroundImage returns the chosen path, or "" if cancelled.

@@ -159,7 +159,12 @@ defmodule MeerkatDaemon.JobManager do
   def handle_cast({:append_output, id, tag, text}, state) do
     update(id, fn job ->
       output = [{tag, text} | Map.get(job, :output, [])]
-      output = if length(output) > @max_output_lines, do: Enum.take(output, @max_output_lines), else: output
+
+      output =
+        if length(output) > @max_output_lines,
+          do: Enum.take(output, @max_output_lines),
+          else: output
+
       Map.put(job, :output, output)
     end)
 

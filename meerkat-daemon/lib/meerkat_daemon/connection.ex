@@ -165,7 +165,10 @@ defmodule MeerkatDaemon.Connection do
   # pty was torn down. Forget the terminal rather than handing its stale device
   # to the next command: macOS recycles ttys numbers, so that path may by then
   # belong to someone else's terminal. ensure_terminal/1 opens a fresh one.
-  def handle_info({:DOWN, os_pid, :process, pid, reason}, %{term: %{os_pid: os_pid, pid: pid}} = state) do
+  def handle_info(
+        {:DOWN, os_pid, :process, pid, reason},
+        %{term: %{os_pid: os_pid, pid: pid}} = state
+      ) do
     Logger.warning("terminal anchor exited (#{inspect(reason)}); reopening on the next command")
     {:noreply, %{state | term: nil}}
   end
@@ -262,8 +265,12 @@ defmodule MeerkatDaemon.Connection do
 
   defp run_pending(%{pending: [line | rest]} = state) do
     case dispatch(line, %{state | pending: rest}) do
-      {:continue, %{current: nil} = state} -> run_pending(state)
-      {:continue, state} -> {:noreply, state}
+      {:continue, %{current: nil} = state} ->
+        run_pending(state)
+
+      {:continue, state} ->
+        {:noreply, state}
+
       {:stop, state} ->
         :gen_tcp.close(state.socket)
         {:stop, :normal, state}

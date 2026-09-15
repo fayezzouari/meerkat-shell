@@ -58,11 +58,20 @@ defmodule MeerkatDaemon.Parser do
     tokenize(rest, [], flush(word, tokens))
   end
 
-  defp tokenize([?&, ?& | rest], word, tokens), do: tokenize(rest, [], [{:op, "&&"} | flush(word, tokens)])
-  defp tokenize([?|, ?| | rest], word, tokens), do: tokenize(rest, [], [{:op, "||"} | flush(word, tokens)])
-  defp tokenize([?| | rest], word, tokens), do: tokenize(rest, [], [{:op, "|"} | flush(word, tokens)])
-  defp tokenize([?; | rest], word, tokens), do: tokenize(rest, [], [{:op, ";"} | flush(word, tokens)])
-  defp tokenize([?& | rest], word, tokens), do: tokenize(rest, [], [:background | flush(word, tokens)])
+  defp tokenize([?&, ?& | rest], word, tokens),
+    do: tokenize(rest, [], [{:op, "&&"} | flush(word, tokens)])
+
+  defp tokenize([?|, ?| | rest], word, tokens),
+    do: tokenize(rest, [], [{:op, "||"} | flush(word, tokens)])
+
+  defp tokenize([?| | rest], word, tokens),
+    do: tokenize(rest, [], [{:op, "|"} | flush(word, tokens)])
+
+  defp tokenize([?; | rest], word, tokens),
+    do: tokenize(rest, [], [{:op, ";"} | flush(word, tokens)])
+
+  defp tokenize([?& | rest], word, tokens),
+    do: tokenize(rest, [], [:background | flush(word, tokens)])
 
   # A backslash outside quotes escapes the next character; a trailing one is
   # kept literally rather than rejected — the shell will have its own opinion.

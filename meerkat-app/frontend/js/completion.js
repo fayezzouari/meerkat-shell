@@ -1,3 +1,20 @@
+// Where the word under the cursor starts: after the last space that is not
+// backslash-escaped. complete.go returns names with their spaces escaped
+// (`My\ Dir/`), which is what lets the next Tab see them as one word.
+export function wordStartIn(before) {
+  let end = before.length;
+  while (end > 0) {
+    const space = before.lastIndexOf(" ", end - 1);
+    if (space < 0) return 0;
+    if (space > 0 && before[space - 1] === "\\") {
+      end = space;
+      continue;
+    }
+    return space + 1;
+  }
+  return 0;
+}
+
 // Candidates aren't necessarily prefixed by what was typed — complete.go also
 // returns substring matches — so completion always replaces the whole word
 // with the candidate, never inserts a computed suffix.
@@ -13,7 +30,7 @@ export function createCompletionMenu(term, editor) {
     const line = editor.getLine();
     const cursor = editor.getCursor();
     const before = line.slice(0, cursor);
-    const wordStart = before.lastIndexOf(" ") + 1;
+    const wordStart = wordStartIn(before);
     const word = before.slice(wordStart);
     const isCommand = wordStart === 0;
 

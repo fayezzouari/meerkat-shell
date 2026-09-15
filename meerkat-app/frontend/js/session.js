@@ -63,6 +63,15 @@ export async function createSession({
     return write(prefix + data);
   }
 
+  // Lines from a multi-line paste that are still to run, in order. Each is
+  // typed into the editor once the prompt is back; `submit` says whether a
+  // newline followed it (the last line of a paste without one stays a draft).
+  /** @type {{ text: string, submit: boolean }[]} */
+  const pendingLines = [];
+
+  // Set by `exit`/`quit`, so a closed connection afterwards is expected.
+  let exitRequested = false;
+
   // Leaves bright white active with no trailing reset, so the command typed
   // next reads white against the grey output around it.
   function prompt() {
@@ -70,8 +79,51 @@ export async function createSession({
     return enqueueWrite(async () => {
       const location = await locationFor(cwd);
       await writeOnFreshLine(`\x1b[0m${location} \x1b[97m❯\x1b[0m \x1b[97m`);
+      // The write above has landed, so this is the column the line starts at
+      // — the editor needs it to place the cursor across wrapped rows.
+      editor.setPromptColumn(term.buffer.active.cursorX);
       awaitingPrompt = false;
+      drainPendingLines();
     });
+  }
+
+  function submitLine() {
+    const line = editor.getLine();
+    // Move to a fresh line locally, like a real terminal: raw pty output
+    // won't send a leading newline of its own. \x1b[0m drops the white
+    // "typing" color set by prompt().
+    term.write("\x1b[0m\r\n");
+    history.record(line);
+    if (["exit", "quit"].includes(line.trim())) exitRequested = true;
+    daemon.sendLine(id, line);
+    jobRunning = true;
+    editor.reset();
+  }
+
+  function drainPendingLines() {
+    if (pendingLines.length === 0 || jobRunning || awaitingPrompt) return;
+    const next = pendingLines.shift();
+    if (next.text) editor.insertText(next.text);
+    if (next.submit) submitLine();
+  }
+
+  // Tabs become a space and other control characters are dropped: the editor
+  // draws what it holds, and a raw tab or escape in the line would desync the
+  // cursor from the text.
+  function sanitizeForLine(text) {
+    return text.replace(/\t/g, " ").replace(/[\x00-\x1f\x7f]/g, "");
+  }
+
+  // A paste arrives as one onData chunk with "\r" between lines. Each line
+  // runs as its own command, in order, the way pasting into a shell does —
+  // rather than one line with embedded carriage returns going to the daemon.
+  function insertPaste(data) {
+    const lines = data.replace(/\r\n?/g, "\n").split("\n");
+    editor.insertText(sanitizeForLine(lines[0]));
+    for (let i = 1; i < lines.length; i++) {
+      pendingLines.push({ text: sanitizeForLine(lines[i]), submit: i < lines.length - 1 });
+    }
+    if (lines.length > 1) submitLine();
   }
 
   // Only tell the daemon when the grid size actually changed. A divider drag
@@ -126,7 +178,9 @@ export async function createSession({
       }
     },
     onPty: (bytes) => enqueueWrite(() => term.write(bytes)),
-    onClosed: () => onSessionEnded(id),
+    // `unexpected` distinguishes the engine going away from a typed `exit`,
+    // which is the difference between "close this pane" and "tell the user".
+    onClosed: () => onSessionEnded(id, { unexpected: !exitRequested }),
   });
   id = info.id;
   cwd = info.cwd || "~";
@@ -201,14 +255,13 @@ export async function createSession({
     if (completion.handleKey(data)) return;
 
     if (data === "\r") {
-      // Move to a fresh line locally, like a real terminal: raw pty output
-      // won't send a leading newline of its own. \x1b[0m drops the white
-      // "typing" color set by prompt().
-      term.write("\x1b[0m\r\n");
-      history.record(editor.getLine());
-      daemon.sendLine(id, editor.getLine());
-      jobRunning = true;
-      editor.reset();
+      submitLine();
+      return;
+    }
+    // More than one character at once is a paste (xterm.js hands keystrokes
+    // over one at a time, escape sequences aside).
+    if (data.length > 1 && data.charCodeAt(0) !== 27) {
+      insertPaste(data);
       return;
     }
     if (data === "\t") {
@@ -240,6 +293,8 @@ export async function createSession({
     }
     if (awaitingPrompt) return;
     if (completion.isActive()) completion.close();
+    // A ^C mid-paste cancels the lines still to run, as in a shell.
+    pendingLines.length = 0;
     enqueueWrite(() => term.write("^C\x1b[0m\r\n"));
     editor.reset();
     prompt();

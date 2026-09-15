@@ -459,7 +459,8 @@ export function createSidebar(sessionManager) {
     }
     if (info) engine = info;
     // A live view, not a history: "done" jobs just pile up.
-    const activeJobs = jobs.filter((j) => j.status === "running" || j.status === "stopped");
+    // `jobs` is null, not [], when Go had nothing to append to its slice.
+    const activeJobs = (jobs || []).filter((j) => j.status === "running" || j.status === "stopped");
     render(sessionManager.list(), activeJobs);
   }
 

@@ -172,7 +172,7 @@ export function createSessionManager({ tabBarEl, panesEl }) {
       onToggleSidebarRequested: () => onToggleSidebar(),
       onToggleVcsRequested: () => onToggleVcs(),
       onSplitRequested: (dir) => splitActive(dir),
-      onSessionEnded: (id) => handleSessionEnded(id),
+      onSessionEnded: (id, info) => handleSessionEnded(id, info),
     });
 
     const leaf = { type: "leaf", id: session.id, session, paneEl };
@@ -373,7 +373,13 @@ export function createSessionManager({ tabBarEl, panesEl }) {
 
   // The pane goes away and its split collapses into its sibling; the last
   // pane closes the tab, and the last tab quits the app.
-  function handleSessionEnded(sessionId) {
+  //
+  // `unexpected` means the connection closed without an `exit`: the engine
+  // was restarted or crashed. Every pane ends at once then, and quitting would
+  // throw the window away with no word of why — so the last one becomes an
+  // error tab whose Retry reconnects (or starts a fresh engine) instead.
+  /** @param {{ unexpected?: boolean }} [info] */
+  function handleSessionEnded(sessionId, { unexpected = false } = {}) {
     const tab = tabOfSession(sessionId);
     if (!tab) return;
 
@@ -394,6 +400,12 @@ export function createSessionManager({ tabBarEl, panesEl }) {
     // Tab is now empty. Diff tabs don't count: the last *terminal* going
     // away is what ends the session.
     if (!tabs.some((t) => t.id !== tab.id && t.root?.session?.kind !== "diff")) {
+      if (unexpected) {
+        tab.activeLeafId = null;
+        showTabError(tab, new Error("The connection to the engine closed. Retry reconnects, starting a new engine if none is running."));
+        switchToTab(tab.id);
+        return;
+      }
       window.runtime.Quit();
       return;
     }

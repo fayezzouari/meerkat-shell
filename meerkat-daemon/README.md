@@ -39,18 +39,26 @@ daemon -> client:  "O:<text>"  one stdout line
 
 ## What's implemented
 
-**Parsing** (`lib/meerkat_daemon/parser.ex`) — quoted strings, `|`
-pipelines, trailing `&` for background jobs. Still close to POSIX on
-purpose; a structured `|>` pipe operator is the planned next syntax
-addition.
+**Parsing** (`lib/meerkat_daemon/parser.ex`) — decides what a line *is*:
+a builtin, something for the shell, or a parse error, and whether a
+trailing `&` puts it in the background. Quotes and backslash escapes are
+honoured for builtin arguments (`cd "My Dir"`, `cd My\ Dir`) and an
+unterminated quote is rejected up front. Everything that is not a builtin
+goes to `/bin/sh -c` exactly as typed, so `$HOME`, globs, `>` redirection,
+`;`, `&&` and `||` mean what they mean in a shell instead of being passed
+as literal arguments. A structured `|>` pipe operator is the planned next
+syntax addition.
 
-**Execution** (`lib/meerkat_daemon/evaluator.ex`) — runs pipelines via
+**Execution** (`lib/meerkat_daemon/evaluator.ex`) — runs each line via
 [erlexec](https://github.com/saleyn/erlexec), not a plain `Port`.
 This is what makes real job control possible: a `Port` can only be
 closed (roughly a SIGKILL), it can't suspend, resume, or gracefully
 terminate a process — erlexec exposes the actual OS pid so real
-signals work. stdout and stderr are also genuinely separate streams
-now (Phase 1's `Port` version had to merge them).
+signals work. Every line runs as its own process group (`{:group, 0}`),
+and `kill`/`stop`/`bg` and `^C` signal the *group*, so a pipeline's
+stages and anything the shell forked all get the signal rather than just
+the `sh` waiting on them. stdout and stderr are also genuinely separate
+streams now (Phase 1's `Port` version had to merge them).
 
 **One terminal per connection** (`lib/meerkat_daemon/terminal.ex`) — foreground
 commands share a single pty rather than each getting one of their own. That is
@@ -73,7 +81,10 @@ mode now outlives it.
 - `jobs` — lists id / status (`running` / `stopped` / `done`) / command,
   and, tab-separated after it for frontends to read: the OS pid, the TCP
   ports the job's process tree is listening on, and `detached` if the
-  job has outlived the client that started it
+  job has outlived the client that started it. Foreground commands are
+  dropped from the table the moment they finish — their output already
+  went to the terminal — so the listing is background jobs plus whatever
+  is running right now, not a history of every `ls`
 - `stop <id>` — suspends a running job (SIGSTOP) — our stand-in for
   Ctrl+Z until a client does raw keystroke capture (see
   `meerkat-client`'s roadmap)

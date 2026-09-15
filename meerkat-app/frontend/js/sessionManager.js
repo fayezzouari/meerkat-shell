@@ -379,7 +379,8 @@ export function createSessionManager({ tabBarEl, panesEl }) {
   // throw the window away with no word of why — so the last one becomes an
   // error tab whose Retry reconnects (or starts a fresh engine) instead.
   /** @param {{ unexpected?: boolean }} [info] */
-  function handleSessionEnded(sessionId, { unexpected = false } = {}) {
+  function handleSessionEnded(sessionId, info = {}) {
+    const { unexpected = false } = info;
     const tab = tabOfSession(sessionId);
     if (!tab) return;
 

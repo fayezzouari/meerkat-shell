@@ -245,6 +245,13 @@ func wrap(conn net.Conn) *Client {
 	return &Client{conn: conn, r: bufio.NewReader(conn)}
 }
 
+// SetDeadline bounds every read and write on the connection. For the
+// short-lived connections behind the sidebar (`jobs`, `kill`): a daemon that
+// accepts but never answers must not pin a goroutine and a socket per poll.
+func (c *Client) SetDeadline(t time.Time) error {
+	return c.conn.SetDeadline(t)
+}
+
 func (c *Client) writeFrame(msgType byte, payload []byte) error {
 	frame := make([]byte, 4+1+len(payload))
 	binary.BigEndian.PutUint32(frame[:4], uint32(1+len(payload)))

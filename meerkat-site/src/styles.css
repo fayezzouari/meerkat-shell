@@ -203,70 +203,21 @@ h1, .h2, h3 {
   padding: .18rem .38rem;
 }
 
-/* split install control */
-.install-menu { position: relative; display: flex; flex: none; }
-.install-menu-go,
-.install-menu-toggle {
+/* nav install link */
+.nav-install {
+  flex: none;
   font-family: var(--mono); font-size: .78rem;
   border: 1px solid currentColor;
   background: transparent; color: inherit;
-  transition: background .16s ease, color .16s ease;
-}
-.install-menu-go {
   text-decoration: none;
   padding: .4rem .85rem;
-  border-right-width: 0;
+  transition: background .16s ease, color .16s ease;
 }
-.install-menu-toggle {
-  display: grid; place-items: center;
-  padding-inline: .55rem; cursor: pointer;
-}
-/* Both halves name their colours outright. `background: currentColor` alongside
-   a `color` in the same rule resolves against the new colour, not the inherited
-   one, and paints the button the exact shade of its own text. */
-.install-menu-go:hover,
-.install-menu-toggle:hover {
-  background: var(--ink);
-  color: var(--daylight);
-}
-.nav[data-underground="true"] .install-menu-go:hover,
-.nav[data-underground="true"] .install-menu-toggle:hover {
-  background: var(--sand);
-  color: var(--burrow);
-}
-.install-menu-toggle svg { transition: transform .2s var(--ease-out); }
-.install-menu-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
-
-.install-pop {
-  position: absolute;
-  top: calc(100% + .5rem); right: 0;
-  min-width: 17rem;
-  background: var(--burrow);
-  border: 1px solid var(--line-dark);
-  box-shadow: 0 24px 50px -24px rgba(0, 0, 0, .8);
-  padding: .35rem;
-  z-index: 1;
-  animation: riseSoft .18s var(--ease-out) both;
-}
-.install-pop-row {
-  display: block; width: 100%; text-align: left;
-  background: transparent; border: 0; cursor: pointer;
-  padding: .55rem .7rem;
-  color: var(--sand); text-decoration: none;
-  transition: background .14s ease;
-}
-.install-pop-row:hover { background: var(--soil-raised); }
-.install-pop-name {
-  display: block; font-family: var(--mono); font-size: .8rem;
-}
-.install-pop-detail {
-  display: block; font-family: var(--mono); font-size: .7rem;
-  color: var(--faint-dark); margin-top: .12rem;
-}
-.install-pop-note {
-  margin: .3rem .7rem .5rem; font-family: var(--mono); font-size: .7rem;
-  color: var(--faint-dark); line-height: 1.5;
-}
+/* Named outright: `background: currentColor` alongside a `color` in the same
+   rule resolves against the new colour and paints the link the shade of its
+   own text. */
+.nav-install:hover { background: var(--ink); color: var(--daylight); }
+.nav[data-underground="true"] .nav-install:hover { background: var(--sand); color: var(--burrow); }
 
 /* ── the command palette ──────────────────────────────────────────*/
 
@@ -501,64 +452,6 @@ h1 em {
 }
 .board-foot-val { color: var(--dim-dark); }
 
-/* ── install chooser ──────────────────────────────────────────────
-   Two tabs over one panel. The tabs are quiet on purpose: this is a choice
-   between two equally good paths, not an upsell for one of them. */
-
-.choice { margin-bottom: 1.4rem; }
-.choice-tabs {
-  display: flex;
-  gap: 1.4rem;
-  margin-bottom: .95rem;
-}
-.choice-tab {
-  background: transparent; border: 0; padding: 0 0 .4rem; cursor: pointer;
-  font-family: var(--mono); font-size: .78rem; letter-spacing: .04em;
-  color: var(--faint-light);
-  border-bottom: 1px solid transparent;
-  transition: color .18s ease, border-color .18s ease;
-}
-.choice-tab:hover { color: var(--dim-light); }
-.choice-tab[aria-selected="true"] {
-  color: var(--ink);
-  border-bottom-color: var(--accent);
-}
-.choice-dark .choice-tab { color: var(--faint-dark); }
-.choice-dark .choice-tab:hover { color: var(--dim-dark); }
-.choice-dark .choice-tab[aria-selected="true"] { color: var(--sand); }
-
-/* Panels swap in place, so the block below them does not jump between tabs. */
-.choice-panel { animation: riseSoft .22s var(--ease-out) both; }
-
-.dl-primary { display: flex; flex-wrap: wrap; gap: .7rem; }
-.dl-btn {
-  text-decoration: none;
-  display: inline-flex; flex-direction: column; gap: .18rem;
-  padding: .68rem 1.15rem .72rem;
-}
-.dl-detail { font-size: .7rem; letter-spacing: .06em; opacity: .7; }
-.choice-dark .dl-btn { border-color: var(--sand); color: var(--sand); }
-.choice-dark .dl-btn.primary { background: var(--sand); color: var(--burrow); }
-.choice-dark .dl-btn.primary:hover { background: var(--accent); border-color: var(--accent); }
-.choice-dark .dl-btn.ghost:hover { background: rgba(239, 234, 222, .1); }
-
-.dl-none {
-  margin: 0 0 .8rem; max-width: 46ch;
-  font-size: .95rem; color: var(--dim-light);
-}
-.choice-dark .dl-none { color: var(--dim-dark); }
-.dl-others {
-  margin: .85rem 0 0;
-  font-family: var(--mono); font-size: .76rem; color: var(--faint-light);
-}
-.choice-dark .dl-others { color: var(--faint-dark); }
-/* The note under the download panel: --faint-light is near-black, so in the
-   closing section it was dark text on dark ground — present in the DOM and
-   invisible on screen. */
-.choice-dark .install-note { color: var(--faint-dark); }
-.dl-others a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
-.dl-note { margin-top: .9rem; max-width: 46ch; }
-
 /* the proof strip: what you are actually getting, in facts */
 .proof {
   display: flex; flex-wrap: wrap; align-items: center;
@@ -595,8 +488,7 @@ h1 em {
   min-width: 0;
 }
 .install-cmd code::before { content: "$ "; color: var(--accent); }
-.install-cmd button,
-.dl-steps button {
+.install-cmd button {
   flex: none;
   border: 0; border-left: 1px solid var(--line-dark);
   background: transparent; color: var(--sand);
@@ -604,34 +496,8 @@ h1 em {
   text-transform: uppercase; padding-inline: 1.05rem; cursor: pointer;
   transition: background .14s ease, color .14s ease;
 }
-.install-cmd button:hover,
-.dl-steps button:hover { background: var(--accent); color: var(--burrow); }
-.install-cmd button.done,
-.dl-steps button.done { color: var(--wire); }
-
-/* The same block as the curl line, but two commands deep: each line carries its
-   own prompt, and the copy button spans the pair rather than sitting beside one
-   of them. */
-.dl-steps {
-  display: flex;
-  align-items: stretch;
-  margin-top: 1rem;
-  background: var(--burrow);
-  color: var(--sand);
-  max-width: 100%;
-}
-.dl-steps-lines {
-  display: grid;
-  gap: .35rem;
-  padding: .85rem 1.1rem;
-  min-width: 0;
-}
-.dl-steps code {
-  font-size: clamp(.76rem, 1.35vw, .9rem);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.dl-steps code::before { content: "$ "; color: var(--accent); }
+.install-cmd button:hover { background: var(--accent); color: var(--burrow); }
+.install-cmd button.done { color: var(--wire); }
 
 .install-note {
   font-family: var(--mono); font-size: .76rem; line-height: 1.6;
@@ -966,7 +832,7 @@ h1 em {
      they reach is still in the page, in order. */
   .nav-paths, .nav-k { display: none; }
   .nav-inner { gap: 1rem; }
-  .install-menu { margin-left: auto; }
+  .nav-install { margin-left: auto; }
   .chamber { grid-template-columns: 1fr; }
   .proto-row { grid-template-columns: 2rem 1fr; }
   .proto-row span { grid-column: 2; color: var(--faint-dark); }

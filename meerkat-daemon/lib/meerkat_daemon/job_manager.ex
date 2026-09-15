@@ -10,6 +10,9 @@ defmodule MeerkatDaemon.JobManager do
 
   @table :meerkat_jobs
 
+  # Lines of captured output kept per background job, newest first.
+  @max_output_lines 2000
+
   def start_link(_opts), do: GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
 
   def new_job(cmd_string), do: GenServer.call(__MODULE__, {:new_job, cmd_string})
@@ -20,6 +23,16 @@ defmodule MeerkatDaemon.JobManager do
     do: GenServer.cast(__MODULE__, {:append_output, id, tag, text})
 
   def finish_job(id, exit_code), do: GenServer.cast(__MODULE__, {:finish_job, id, exit_code})
+
+  @doc """
+  Drops a job from the table.
+
+  For foreground commands once they finish: their output already went to the
+  pty, so there is nothing to replay, and a `jobs` listing that grows by one
+  `done` row per `ls` ever typed hides the background jobs it exists for.
+  Anyone blocked in `await/2` is woken as if the job had exited 143.
+  """
+  def remove(id), do: GenServer.cast(__MODULE__, {:remove, id})
 
   @doc """
   Marks a job as outliving the connection that started it.
@@ -70,12 +83,19 @@ defmodule MeerkatDaemon.JobManager do
         {:ok, code}
 
       %{} ->
-        GenServer.call(__MODULE__, {:add_waiter, id, self()})
+        # The status read above was outside the GenServer, so the job may have
+        # finished in between; add_waiter re-checks inside it and answers
+        # directly rather than registering a waiter nothing would ever wake.
+        case GenServer.call(__MODULE__, {:add_waiter, id, self()}) do
+          {:done, code} ->
+            {:ok, code}
 
-        receive do
-          {:job_done, ^id, code} -> {:ok, code}
-        after
-          timeout -> {:error, :timeout}
+          :waiting ->
+            receive do
+              {:job_done, ^id, code} -> {:ok, code}
+            after
+              timeout -> {:error, :timeout}
+            end
         end
 
       nil ->
@@ -108,8 +128,14 @@ defmodule MeerkatDaemon.JobManager do
   end
 
   def handle_call({:add_waiter, id, caller}, _from, state) do
-    waiters = Map.update(state.waiters, id, [caller], &[caller | &1])
-    {:reply, :ok, %{state | waiters: waiters}}
+    case :ets.lookup(@table, id) do
+      [{^id, %{status: :done, exit_code: code}}] ->
+        {:reply, {:done, code}, state}
+
+      _ ->
+        waiters = Map.update(state.waiters, id, [caller], &[caller | &1])
+        {:reply, :waiting, %{state | waiters: waiters}}
+    end
   end
 
   @impl true
@@ -128,18 +154,32 @@ defmodule MeerkatDaemon.JobManager do
     {:noreply, state}
   end
 
+  # Newest first, capped: a server left running for a day would otherwise keep
+  # every line it ever logged, and `fg` would replay all of it.
   def handle_cast({:append_output, id, tag, text}, state) do
-    update(id, &Map.update(&1, :output, [{tag, text}], fn out -> [{tag, text} | out] end))
+    update(id, fn job ->
+      output = [{tag, text} | Map.get(job, :output, [])]
+      output = if length(output) > @max_output_lines, do: Enum.take(output, @max_output_lines), else: output
+      Map.put(job, :output, output)
+    end)
+
     {:noreply, state}
   end
 
   def handle_cast({:finish_job, id, exit_code}, state) do
     update(id, &(&1 |> Map.put(:status, :done) |> Map.put(:exit_code, exit_code)))
+    {:noreply, wake_waiters(state, id, exit_code)}
+  end
 
+  def handle_cast({:remove, id}, state) do
+    :ets.delete(@table, id)
+    {:noreply, wake_waiters(state, id, 143)}
+  end
+
+  defp wake_waiters(state, id, exit_code) do
     {waiting, waiters} = Map.pop(state.waiters, id, [])
     Enum.each(waiting, &send(&1, {:job_done, id, exit_code}))
-
-    {:noreply, %{state | waiters: waiters}}
+    %{state | waiters: waiters}
   end
 
   defp update(id, fun) do

@@ -93,8 +93,9 @@ own WebKit data store, keyed by bundle id rather than by install, and nothing in
 `~/.meerkat` besides the program files is touched. It refuses to downgrade;
 `sh -s -- --reinstall` overrides both that and the up-to-date check.
 
-On Linux there is also a file: the page offers `meerkat-linux-amd64.tar.gz`,
-and every tarball carries `install.sh`, so an unpacked release installs itself
+The page only offers the command, and only for macOS for now; support for
+other operating systems is in progress. The tarballs are still on every GitHub
+Release, and each carries `install.sh`, so an unpacked release installs itself
 with no network:
 
 ```
@@ -105,8 +106,8 @@ mkdir -p meerkat && tar -xzf ~/Downloads/meerkat-linux-amd64.tar.gz -C meerkat
 The `mkdir` is not optional — the archive is flat, and `tar -C` will not create
 the directory it is pointed at.
 
-On macOS the command is the only install the page offers, and that is a
-Gatekeeper decision rather than a style one. A file a browser downloads is
+The command being the only install on macOS is a Gatekeeper decision rather
+than a style one. A file a browser downloads is
 quarantined, and macOS refuses to open a quarantined app unless it is signed
 with an Apple Developer ID and notarized — which needs a paid developer account
 this project does not have. There is no free way around that: an unsigned

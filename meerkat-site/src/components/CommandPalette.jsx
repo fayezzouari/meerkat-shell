@@ -1,23 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  DOWNLOAD_FILES,
-  REPO_URL,
-  detectOs,
-  downloadUrl,
-  installCommand,
-} from "../data/install.js";
+import { REPO_URL, installCommand } from "../data/install.js";
 
 // ⌘K. A shell's own way of getting somewhere is to type where you want to go, so
 // the page offers the same thing rather than a menu.
 //
-// Deliberately small: it navigates, it copies the install line, it hands over a
-// file. It is not a search engine over the page's prose, which would be a
+// Deliberately small: it navigates and it copies the install line. It is not a search engine over the page's prose, which would be a
 // promise the index cannot keep.
 
 function useItems() {
   return useMemo(() => {
     const command = installCommand();
-    const os = detectOs();
 
     const go = (id, name, hint) => ({
       id: `go:${id}`,
@@ -41,23 +33,6 @@ function useItems() {
         run: () => navigator.clipboard?.writeText(command),
       },
     ];
-
-    // The reader's own platform first — the others are still reachable by
-    // typing, they just are not the thing sitting under the cursor.
-    const platforms = os === "linux" ? ["linux", "macos"] : ["macos", "linux"];
-    for (const platform of platforms) {
-      for (const asset of DOWNLOAD_FILES[platform] ?? []) {
-        items.push({
-          id: `dl:${asset.id}`,
-          name: asset.label.toLowerCase(),
-          hint: asset.detail,
-          kind: "Download",
-          run: () => {
-            window.location.href = downloadUrl(asset.file);
-          },
-        });
-      }
-    }
 
     items.push({
       id: "source",
